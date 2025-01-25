@@ -12,6 +12,8 @@ ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
 def strLen(s):
     return len(ansi_escape.sub('', s))
+def ANSILen(s):
+    return len(s) - len(ansi_escape.sub('', s))
 
 class Row:
     def __init__(self, data=''):
@@ -22,7 +24,7 @@ class Row:
     
     def __setitem__(self, idx, value):
         if idx >= len(self.data):
-            self.data += [None]*(idx-len(self.data)+1)
+            self.data += ['']*(idx-len(self.data)+1)
         self.data[idx] = value
     
     def __len__(self):
@@ -33,10 +35,11 @@ class Row:
             return ''.join(self.data) == other
         return self.data == other.data
     
-    def __add__(self, other):
+    @staticmethod
+    def split(s):
         nl = []
         out = ''
-        for i in other:
+        for i in s:
             if ansi_escape.sub('', i) == '':
                 out += i
             else:
@@ -44,7 +47,10 @@ class Row:
                 out = ''
         if out:
             nl.append(out)
-        return Row(self.data+nl)
+        return nl
+    
+    def __add__(self, other):
+        return Row(self.data+self.split(other))
     
     def __str__(self):
         return ''.join(self.data)
@@ -61,9 +67,12 @@ class Screen:
     def Write(self, x, y, *args):
         """Writes "".join(args) at (x, y)"""
         t = "".join(args)
+        if x < 0:
+            t = t[-x:]
+            x = 0
         if y in self.screen:
             if len(self.screen[y]) >= x:
-                self.screen[y] = Row(self.screen[y][:x] + [t] + self.screen[y][x+strLen(t):])
+                self.screen[y] = Row(self.screen[y][:x] + Row.split(t) + self.screen[y][x+strLen(t):])
             else:
                 self.screen[y] += ' '*(x-len(self.screen[y])) + t
         else:
@@ -78,18 +87,19 @@ class Screen:
 
 class TerminalAPI:
     def __init__(self):
-        self._windows = []
+        self._elms = []
         self._RawMouse = [0, 0]
         self._MouseStatus = 0
         self._MouseSensitivity = [0.249, 0.13]
         self.Screen = Screen(self)
         self._oldScreen = Screen(self)
     
-    def add_window(self, window):
-        self._windows.append(window)
+    def add_elm(self, window):
+        self._elms.append(window)
     
-    def remove_window(self, window):
-        self._windows.remove(window)
+    def remove_elm(self, window):
+        if window in self._elms:
+            self._elms.remove(window)
     
     @property
     def Mouse(self):
@@ -107,7 +117,7 @@ class TerminalAPI:
     
     def updateAll(self):
         redraw = False
-        for window in self._windows:
+        for window in self._elms:
             if window.update():
                 redraw = True
         return redraw
@@ -115,20 +125,37 @@ class TerminalAPI:
     def drawAll(self):
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
         self.Screen.Clear()
-        for window in self._windows:
+        for window in self._elms:
             window.draw()
     
     def print(self):
+        winSize = self.get_terminal_size()
         for y, oldrow in self._oldScreen.screen.items():
+            if y < 0 or y > winSize[1]-1:
+                continue
             if y in self.Screen.screen:
                 newrow = self.Screen.screen[y]
                 if oldrow != newrow:
-                    sys.stdout.write(f'\033[{y+1};2H'+str(newrow)+' '*max(len(oldrow)-len(newrow), 0))
+                    new = str(newrow)+' '*max(len(oldrow)-len(newrow), 0)
+                    sys.stdout.write(f'\033[{y+1};1H'+new[:winSize[0]+ANSILen(new)])
             else:
-                sys.stdout.write(f'\033[{y+1};2H'+' '*len(oldrow))
+                sys.stdout.write(f'\033[{y+1};1H'+' '*min(strLen(str(oldrow)), winSize[0]))
         for y, newrow in self.Screen.screen.items():
+            if y < 0 or y > winSize[1]-1:
+                continue
             if y not in self._oldScreen.screen or self._oldScreen.screen[y] != newrow:
-                sys.stdout.write(f'\033[{y+1};2H'+str(newrow))
+                new = str(newrow)
+                sys.stdout.write(f'\033[{y+1};1H'+new[:winSize[0]+ANSILen(new)])
+    
+    def printAll(self):
+        winSize = self.get_terminal_size()
+        for y in range(winSize[1]):
+            if y in self.Screen.screen:
+                new = str(self.Screen.screen[y])
+            else:
+                new = ''
+            
+            sys.stdout.write(f'\033[{y+1};1H\033[K'+new[:winSize[0]+ANSILen(new)])
     
     @property
     def moveToMouse(self):
@@ -142,6 +169,20 @@ class TerminalAPI:
 class Element:
     API: TerminalAPI # API class variable will be set here, going down to all Element subclasses to use!
 
+    def __new__(cls, *args, **kwargs):
+        elm = super().__new__(cls)
+        cls.API.add_elm(elm)
+        return elm
+
+    def __del__(self):
+        self.API.remove_elm(self)
+    
+    def draw(self):
+        pass
+
+    def update(self):
+        return False
+
     @property
     def _Screen(self) -> Screen:
         return self.API.Screen
@@ -150,12 +191,16 @@ class Element:
         """Writes "".join(args) at (x, y)"""
         self._Screen.Write(x, y, *args)
 
+class Border(Element):
+    def draw(self):
+        cols, rows = self.API.get_terminal_size()
+        self._Write(0, 0, '╭', '─' * (cols-2), '╮')
+        for row in range(1, rows-1):
+            self._Write(0, row, '│')
+            self._Write(cols-1, row, '│')
+        self._Write(0, rows-1, '╰', '─' * (cols-2), '╯')  # Bottom border
+
 class Window(Element):
-    def __new__(cls, *args, **kwargs):
-        window = super().__new__(cls)
-        cls.API.add_window(window)
-        return window
-    
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -163,9 +208,6 @@ class Window(Element):
         self._height = 0
         self._grabbed = None
         self._moved = False
-    
-    def __del__(self):
-        self.API.remove_window(self)
     
     def draw(self):
         self._draw([])

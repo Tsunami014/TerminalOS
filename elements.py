@@ -1,4 +1,4 @@
-from API import Window
+from API import Window, strLen
 
 class TextWindow(Window):
     def __init__(self, x, y, text, max_width=None):
@@ -26,7 +26,7 @@ class TextWindow(Window):
         if self.max_width:
             lines = []
             for paragraph in self._text.split('\n'):
-                while len(paragraph) > self.max_width:
+                while strLen(paragraph) > self.max_width:
                     space_index = paragraph.rfind(' ', 0, self.max_width)
                     if space_index == -1:
                         space_index = self.max_width

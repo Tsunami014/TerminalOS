@@ -18,6 +18,7 @@ def ANSILen(s):
 class Row:
     def __init__(self, data=''):
         self.data = list(data)
+        self.fix()
     
     def __getitem__(self, idx):
         return self.data[idx]
@@ -37,20 +38,16 @@ class Row:
     
     @staticmethod
     def split(s):
-        nl = []
-        out = ''
-        for i in s:
-            if ansi_escape.sub('', i) == '':
-                out += i
-            else:
-                nl.append(out+i)
-                out = ''
-        if out:
-            nl.append(out)
-        return nl
+        tokens = re.findall(r'(?:(?:\x1B\[[0-9;]*[a-zA-Z])?[^\x1B]?)', s)
+        return [i for i in tokens if i]
+
+    def fix(self):
+        self.data = self.split(''.join(self.data))
     
     def __add__(self, other):
-        return Row(self.data+self.split(other))
+        nr = Row(self.data+self.split(other))
+        nr.fix()
+        return nr
     
     def __str__(self):
         return ''.join(self.data)
@@ -198,7 +195,7 @@ class Border(Element):
         for row in range(1, rows-1):
             self._Write(0, row, '│')
             self._Write(cols-1, row, '│')
-        self._Write(0, rows-1, '╰', '─' * (cols-2), '╯')  # Bottom border
+        self._Write(0, rows-1, '╰', '─' * (cols-2), '╯')
 
 class Window(Element):
     def __init__(self, x, y):

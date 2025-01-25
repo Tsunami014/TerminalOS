@@ -4,7 +4,7 @@ import termios
 import tty
 from IO import Pollable, Readable
 from API import TerminalAPI, Element, Border
-from elements import TextWindow
+from elements import TextWindow, Popup
 
 API = TerminalAPI()
 Element.API = API
@@ -15,6 +15,7 @@ def clear_console():
 def main():
     Border()
     TextWindow(10, 20, 'Hello, World!')
+    Popup('This is a popup!', 5)
 
     # clear_console()
     API.drawAll()
@@ -68,7 +69,7 @@ def main():
                     mp = API.Mouse
                     sze = API.get_terminal_size()
                     if mp[0] not in (-1, sze[0]) and mp[1] not in (-1, sze[1]+2):
-                        API.Screen.Write(*mp, '\033[31;42m'+API.Screen.Get(*mp)+'\033[0m')
+                        API.Screen.Write(*mp, '\033[7m'+API.Screen.Get(*mp)+'\033[27m')
                     API.printAll()#print()
                     sys.stdout.flush()
                     force_draw = False

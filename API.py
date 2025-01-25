@@ -69,8 +69,10 @@ class Window(Element):
         self._width = 0
         self._height = 0
         self._grabbed = None
+        self._moved = False
     
     def __del__(self):
+        sys.stdout.write(''.join(f'\033[{self.y+i};{self.x}H'+' '*self.width for i in range(self.height)))
         self.API.remove_window(self)
     
     def draw(self):
@@ -87,7 +89,7 @@ class Window(Element):
         width, height = max(len(i) for i in (lines or [''])), len(lines)
         self._width = width
         self._height = height
-        sys.stdout.write(f'\033[{self.y};{self.x}H╭'+('─'*width)+'╮')
+        sys.stdout.write(f'\033[{self.y};{self.x}H╭'+('─'*width)+'X')
         for idx, ln in enumerate(lines):
             sys.stdout.write(f'\033[{self.y+idx+1};{self.x}H│{ln}│')
         sys.stdout.write(f'\033[{self.y+height+1};{self.x}H╰'+('─'*width)+'╯')
@@ -97,16 +99,21 @@ class Window(Element):
             if self._grabbed is None:
                 mpos = self.API.Mouse
                 if mpos[1] == self.y and self.x <= mpos[0] < (self.x+self.width):
+                    self._moved = False
                     self._grabbed = mpos
             else:
                 mpos = self.API.Mouse
                 if self._grabbed != mpos:
+                    self._moved = True
                     sys.stdout.write(''.join(f'\033[{self.y+i};{self.x}H'+' '*self.width for i in range(self.height)))
                     diff = [self._grabbed[0]-mpos[0], self._grabbed[1]-mpos[1]]
                     self.x -= diff[0]
                     self.y -= diff[1]
                     self._grabbed = mpos
         else:
+            if not self._moved and self._grabbed is not None:
+                if self._grabbed == (self.x+self.width-1, self.y):
+                    self.__del__()
             self._grabbed = None
 
     def __str__(self):

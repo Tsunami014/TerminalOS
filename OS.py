@@ -15,7 +15,7 @@ def clear_console():
 def main():
     Border()
     TextWindow(10, 20, 'Hello, World!')
-    Popup('This is a popup!', 5)
+    Popup('This is a popup!\nHi!', 5)
 
     # clear_console()
     API.drawAll()

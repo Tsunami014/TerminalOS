@@ -63,10 +63,10 @@ class Popup(Element):
         cols, rows = self.API.get_terminal_size()
         self.x, self.y = cols - max(strLen(i) for i in lines) - 2, rows - len(lines) - 2
         width, height = max(strLen(i) for i in (lines or [''])), len(lines)
-        self._Write(self.x, self.y, '\033[100;34m▎\033[39m', ' '*width, ' \033[0m')
+        self._Write(self.x, self.y, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
         for idx, ln in enumerate(lines):
-            self._Write(self.x, self.y+idx+1, f'\033[100;34m▎\033[39m{ln} \033[0m')
-        self._Write(self.x, self.y+height+1, '\033[100;34m▎\033[39m', ' '*width, ' \033[0m')
+            self._Write(self.x, self.y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(width-len(ln))}\033[0m')
+        self._Write(self.x, self.y+height+1, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
     
     def update(self):
         if time.time() - self.start_time > self.duration:

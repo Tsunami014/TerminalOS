@@ -82,6 +82,19 @@ class Screen:
                 return self.screen[y][x]
         return ' '
 
+class Clipboard:
+    @staticmethod
+    def writeSelection(data):
+        os.system(f'echo "{data.replace("\"", "\\\"")}" | xsel -p --display :0')
+    
+    @staticmethod
+    def write(data):
+        os.system(f'echo "{data.replace("\"", "\\\"")}" | xsel -b --display :0')
+    
+    @staticmethod
+    def read():
+        return os.popen('xsel -b --display :0').read()
+
 class TerminalAPI:
     def __init__(self):
         self._elms = []

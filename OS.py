@@ -5,7 +5,7 @@ import tty
 from IO import Pollable, Readable
 from API import TerminalAPI, Container, Border
 from containers import Window, Popup
-from widgets import Text
+import widgets as wids
 
 API = TerminalAPI()
 Container.API = API
@@ -15,8 +15,11 @@ def clear_console():
 
 def main():
     Border()
-    Window(10, 20, Text(0, 0, 'Hello, World!'))
-    Popup(Text(0, 0, 'This is a popup!\nHi!'), duration=5)
+
+    def update_text(btn):
+        btn.parent.widgets[0].text = 'Clicked!'
+    Window(10, 18, wids.Text(0, 0, 'Hello, World!'), wids.Button(0, 1, 'Click me!', update_text))
+    Popup(wids.Text(0, 0, 'This is a popup!\nHi!'), duration=5)
 
     # clear_console()
     API.drawAll()

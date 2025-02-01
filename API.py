@@ -6,6 +6,7 @@ __all__ = [
     'TerminalAPI',
     'Container',
     'Widget',
+    'PositionedWidget'
 ]
 
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -240,7 +241,6 @@ class ContainerWidgets(list):
         super().append(elm(self.parent))
 
 class Widget:
-    API: TerminalAPI # API class variable will be set here, going down to all Element subclasses to use!
     parent: Container
 
     def __new__(cls, *args, **kwargs):
@@ -257,6 +257,10 @@ class Widget:
     def __del__(self):
         self.parent.widgets.remove(self)
     
+    @property
+    def API(self):
+        return self.parent.API
+    
     def draw(self):
         pass
 
@@ -270,6 +274,14 @@ class Widget:
     def _Write(self, x, y, *args):
         """Writes "".join(args) at (x, y)"""
         self._Screen.Write(x, y, *args)
+
+class PositionedWidget(Widget):
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+    
+    @property
+    def realPos(self):
+        return self.x+self.parent.x, self.y+self.parent.y
 
 class Border(Container):
     def draw(self):

@@ -39,7 +39,7 @@ class Window(Container):
         self._height = height
         self._Write(x, y, '╭', '─'*(width-1), ('[' if not isFull else ']'), 'X')
         for idx, ln in enumerate(lines):
-            self._Write(x, y+idx+1, f'│{ln}{" "*(width-len(ln))}│')
+            self._Write(x, y+idx+1, f'│{ln}{" "*(width-strLen(ln))}│')
         for idx in range(len(lines), height):
             self._Write(x, y+idx+1, '│'+' '*width+'│')
         self._Write(x, y+height+1, '╰', '─'*width, '╯')

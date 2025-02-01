@@ -3,19 +3,20 @@ import sys
 import termios
 import tty
 from IO import Pollable, Readable
-from API import TerminalAPI, Element, Border
-from elements import TextWindow, Popup
+from API import TerminalAPI, Container, Border
+from containers import Window, Popup
+from widgets import Text
 
 API = TerminalAPI()
-Element.API = API
+Container.API = API
 
 def clear_console():
     sys.stdout.write('\033[2J\033[H')
 
 def main():
     Border()
-    TextWindow(10, 20, 'Hello, World!')
-    Popup('This is a popup!\nHi!', 5)
+    Window(10, 20, Text(0, 0, 'Hello, World!'))
+    Popup(Text(0, 0, 'This is a popup!\nHi!'), duration=5)
 
     # clear_console()
     API.drawAll()

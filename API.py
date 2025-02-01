@@ -4,8 +4,8 @@ import re
 
 __all__ = [
     'TerminalAPI',
-    'Element',
-    'Window'
+    'Container',
+    'Widget',
 ]
 
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -54,8 +54,7 @@ class Row:
     def __repr__(self): return str(self)
 
 class Screen:
-    def __init__(self, API):
-        self.API: TerminalAPI = API
+    def __init__(self):
         self.Clear()
     
     def Clear(self):
@@ -88,6 +87,10 @@ class Clipboard:
         os.system(f'echo "{data.replace("\"", "\\\"")}" | xsel -p --display :0')
     
     @staticmethod
+    def readSelection():
+        return os.popen('xsel -p --display :0').read()
+    
+    @staticmethod
     def write(data):
         os.system(f'echo "{data.replace("\"", "\\\"")}" | xsel -b --display :0')
     
@@ -102,8 +105,8 @@ class TerminalAPI:
         self._RawMouse = [0, 0]
         self._MouseStatus = 0
         self._MouseSensitivity = [0.249, 0.13]
-        self.Screen = Screen(self)
-        self._oldScreen = Screen(self)
+        self.Screen = Screen()
+        self._oldScreen = Screen()
     
     def add_elm(self, window):
         self._elms.append(window)
@@ -187,7 +190,7 @@ class TerminalAPI:
         rows, cols = os.popen('stty size', 'r').read().split()
         return int(cols), int(rows)
 
-class Element:
+class Container:
     API: TerminalAPI # API class variable will be set here, going down to all Element subclasses to use!
     DRAW_WHILE_FULL = False
 
@@ -225,7 +228,50 @@ class Element:
         """Writes "".join(args) at (x, y)"""
         self._Screen.Write(x, y, *args)
 
-class Border(Element):
+class ContainerWidgets(list):
+    def __init__(self, parent, startingList=None):
+        self.parent = parent
+        if startingList is not None:
+            super().__init__([i(self.parent) for i in startingList])
+        else:
+            super().__init__()
+    
+    def append(self, elm):
+        super().append(elm(self.parent))
+
+class Widget:
+    API: TerminalAPI # API class variable will be set here, going down to all Element subclasses to use!
+    parent: Container
+
+    def __new__(cls, *args, **kwargs):
+        sup_new = super().__new__
+        def new(parent):
+            elm = sup_new(cls)
+            elm.parent = parent
+            elm.__init__(*args, **kwargs)
+            if hasattr(parent, 'widgets'):
+                parent.widgets.append(elm)
+            return elm
+        return new
+    
+    def __del__(self):
+        self.parent.widgets.remove(self)
+    
+    def draw(self):
+        pass
+
+    def update(self):
+        return False
+    
+    @property
+    def _Screen(self) -> Screen:
+        return self.parent.Screen
+    
+    def _Write(self, x, y, *args):
+        """Writes "".join(args) at (x, y)"""
+        self._Screen.Write(x, y, *args)
+
+class Border(Container):
     def draw(self):
         cols, rows = self.API.get_terminal_size()
         self._Write(0, 0, '╭', '─' * (cols-2), '╮')
@@ -233,84 +279,3 @@ class Border(Element):
             self._Write(0, row, '│')
             self._Write(cols-1, row, '│')
         self._Write(0, rows-1, '╰', '─' * (cols-2), '╯')
-
-class Window(Element):
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self._oldpos = None
-        self._width = 0
-        self._height = 0
-        self._grabbed = None
-        self._moved = False
-    
-    def draw(self):
-        self._draw([])
-    
-    @property
-    def width(self):
-        return self._width + 2
-    @property
-    def height(self):
-        return self._height + 2
-    
-    def fullscreen(self):
-        self._oldpos = (self.x, self.y)
-        self.x, self.y = 0, 0
-        return super().fullscreen()
-    
-    def unfullscreen(self):
-        if self._oldpos is not None:
-            self.x, self.y = self._oldpos
-        return super().unfullscreen()
-
-    def _draw(self, lines):
-        isFull = self.isFullscreen
-        if isFull:
-            width, height = self.API.get_terminal_size()
-            width -= 2
-            height -= 2
-        else:
-            width, height = max(strLen(i) for i in (lines or [''])), len(lines)
-        x, y = self.x, self.y
-        self._width = width
-        self._height = height
-        self._Write(x, y, '╭', '─'*(width-1), ('[' if not isFull else ']'), 'X')
-        for idx, ln in enumerate(lines):
-            self._Write(x, y+idx+1, f'│{ln}{" "*(width-len(ln))}│')
-        for idx in range(len(lines), height):
-            self._Write(x, y+idx+1, '│'+' '*width+'│')
-        self._Write(x, y+height+1, '╰', '─'*width, '╯')
-    
-    def update(self):
-        if self.API.LMB:
-            if self._grabbed is None:
-                mpos = self.API.Mouse
-                if mpos[1] == self.y and self.x <= mpos[0] < (self.x+self.width):
-                    self._moved = False
-                    self._grabbed = mpos
-            else:
-                mpos = self.API.Mouse
-                if self._grabbed != mpos:
-                    self._moved = True
-                    diff = [self._grabbed[0]-mpos[0], self._grabbed[1]-mpos[1]]
-                    self.x -= diff[0]
-                    self.y -= diff[1]
-                    self._grabbed = mpos
-                    return True
-        else:
-            if not self._moved and self._grabbed is not None:
-                if self._grabbed == (self.x+self.width-1, self.y):
-                    self.__del__()
-                    return True
-                elif self._grabbed == (self.x+self.width-2, self.y):
-                    if self.isFullscreen:
-                        self.unfullscreen()
-                    else:
-                        self.fullscreen()
-                    return True
-            self._grabbed = None
-
-    def __str__(self):
-        return '<Window object>'
-    def __repr__(self): return str(self)

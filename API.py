@@ -212,24 +212,28 @@ class TerminalAPI:
         return int(cols), int(rows)
 
 class Position:
-    def __call__(self, size, parentSize, parentFull):
+    def __call__(self, size, winSzefun, parentFull):
         return (0, 0)
 
 class StaticPos(Position):
     def __init__(self, x, y):
         self.x, self.y = x, y
     
-    def __call__(self, size, parentSize, parentFull):
+    def __call__(self, size, winSzefun, parentFull):
         return (self.x, self.y)
 
 class RelativePos(Position):
+    """
+    Gets a weighted position if the parent is fullscreen, otherwise uses the fallback.
+    """
     def __init__(self, weight_x, weight_y, fallback_x, fallback_y):
         self.weight = (weight_x, weight_y)
         self.fallback = (fallback_x, fallback_y)
     
-    def __call__(self, size, parentSize, parentFull):
+    def __call__(self, size, winSzefun, parentFull):
         if parentFull:
-            return (round((parentSize[0]-size[0])*self.weight[0]), round((parentSize[1]-size[1])*self.weight[1]))
+            winSze = winSzefun()
+            return (round((winSze[0]-size[0]-2)*self.weight[0]), round((winSze[1]-size[1])*self.weight[1]))
         return self.fallback
 
 class BarElm:
@@ -397,11 +401,11 @@ class PositionedWidget(Widget):
     
     @property
     def pos(self):
-        return self._pos((self.width, self.height), (self.parent._width, self.parent._height), self.parent.isFullscreen)
+        return self._pos((self.width, self.height), self.API.get_terminal_size, self.parent.isFullscreen)
     
     @property
     def realPos(self):
-        x, y = self._pos((self.width, self.height), (self.parent._width, self.parent._height), self.parent.isFullscreen)
+        x, y = self._pos((self.width, self.height), self.API.get_terminal_size, self.parent.isFullscreen)
         return x+self.parent.x, y+self.parent.y
 
 class Window(Container):
@@ -509,7 +513,6 @@ class Popup(Container):
         self.duration = duration
         self.start_time = time.time()
         self.x, self.y = None, None
-        self._width, self._height = 0, 0
     
     def draw(self):
         self.Screen.Clear()
@@ -522,11 +525,11 @@ class Popup(Container):
 
         cols, rows = self.API.get_terminal_size()
         self.x, self.y = cols - max(strLen(i) for i in lines) - 2, rows - len(lines) - 2
-        self._width, self._height = max(strLen(i) for i in (lines or [''])), len(lines)
-        self._Write(self.x, self.y, '\033[100;34;1m│\033[39m', ' '*self._width, ' \033[0m')
+        width, height = max(strLen(i) for i in (lines or [''])), len(lines)
+        self._Write(self.x, self.y, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
         for idx, ln in enumerate(lines):
-            self._Write(self.x, self.y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(self._width-len(ln))}\033[0m')
-        self._Write(self.x, self.y+self._height+1, '\033[100;34;1m│\033[39m', ' '*self._width, ' \033[0m')
+            self._Write(self.x, self.y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(width-len(ln))}\033[0m')
+        self._Write(self.x, self.y+height+1, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
     
     def update(self):
         if self.API.LMBP and self.x is not None and self.y is not None:

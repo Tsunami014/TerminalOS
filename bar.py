@@ -3,7 +3,8 @@ import os
 import time
 
 __all__ = [
-    'BarApp'
+    'BarApp',
+    'BarCmd'
 ]
 
 class BarApp(ClickBarElm):

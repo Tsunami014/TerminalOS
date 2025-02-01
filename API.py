@@ -154,10 +154,12 @@ class TerminalAPI:
             if elm.update():
                 redraw = True
         return redraw
-    
-    def drawAll(self):
+
+    def resetScreens(self):
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
         self.Screen.Clear()
+    
+    def drawAll(self):
         if self.fullscreen is not None:
             for elm in self.elms:
                 if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
@@ -367,15 +369,6 @@ class PositionedWidget(Widget):
     @property
     def realPos(self):
         return self.x+self.parent.x, self.y+self.parent.y
-
-class Border(Container):
-    def draw(self):
-        cols, rows = self.API.get_terminal_size()
-        self._Write(0, 0, '╭', '─' * (cols-2), '╮')
-        for row in range(1, rows-1):
-            self._Write(0, row, '│')
-            self._Write(cols-1, row, '│')
-        self._Write(0, rows-1, '╰', '─' * (cols-2), '╯')
 
 class Window(Container):
     def __init__(self, x, y, *widgets):

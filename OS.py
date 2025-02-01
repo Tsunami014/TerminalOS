@@ -3,7 +3,7 @@ import sys
 import termios
 import tty
 from IO import Pollable, Readable
-from API import TerminalAPI, Container, Border
+from API import TerminalAPI, Container
 import apps
 import bar
 
@@ -14,8 +14,6 @@ def clear_console():
     sys.stdout.write('\033[2J\033[H')
 
 def main():
-    Border()
-
     bar.BarApp(apps.Help)
     bar.BarApp(apps.Test)
     bar.BarCmd(8, "timedatectl | grep -P -o '(?<=Local time: )[a-zA-Z]+?[ \\-0-9:]+'")
@@ -81,9 +79,15 @@ def main():
                     force_draw = True
                 
                 if API.updateAll() or force_draw or True:
-                    API.drawAll()
-                    
+                    API.resetScreens()
                     sze = API.get_terminal_size()
+
+                    API.Screen.Write(0, 0, '╭', '─' * (sze[0]-2), '╮')
+                    for row in range(1, sze[1]-1):
+                        API.Screen.Write(0, row, '│')
+                        API.Screen.Write(sze[0]-1, row, '│')
+                    API.Screen.Write(0, sze[1]-1, '╰', '─' * (sze[0]-2), '╯')
+
                     for id in range(1, 9):
                         totSze = 1
                         for elm in API.barElms:
@@ -107,6 +111,8 @@ def main():
                                     y = sze[1]-1
                                 
                                 totSze += elm.draw(x, y)
+                    
+                    API.drawAll()
                     
                     mp = API.Mouse
                     if mp[0] not in (-1, sze[0]) and mp[1] not in (-1, sze[1]+2):

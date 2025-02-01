@@ -39,6 +39,8 @@ class TextWindow(Window):
         self._draw(lines)
 
 class Popup(Element):
+    DRAW_WHILE_FULL = True
+    
     def __init__(self, text, duration=3, max_width=None):
         self.max_width = max_width
         self.text = text

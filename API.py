@@ -85,6 +85,7 @@ class Screen:
 class TerminalAPI:
     def __init__(self):
         self._elms = []
+        self.fullscreen = None
         self._RawMouse = [0, 0]
         self._MouseStatus = 0
         self._MouseSensitivity = [0.249, 0.13]
@@ -113,17 +114,27 @@ class TerminalAPI:
         return bool(self._MouseStatus & 2)
     
     def updateAll(self):
+        if self.fullscreen is not None:
+            for elm in self._elms:
+                if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
+                    if elm.update():
+                        return True
         redraw = False
-        for window in self._elms:
-            if window.update():
+        for elm in self._elms:
+            if elm.update():
                 redraw = True
         return redraw
     
     def drawAll(self):
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
         self.Screen.Clear()
-        for window in self._elms:
-            window.draw()
+        if self.fullscreen is not None:
+            for elm in self._elms:
+                if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
+                    elm.draw()
+        else:
+            for elm in self._elms:
+                elm.draw()
     
     def print(self):
         winSize = self.get_terminal_size()
@@ -165,6 +176,7 @@ class TerminalAPI:
 
 class Element:
     API: TerminalAPI # API class variable will be set here, going down to all Element subclasses to use!
+    DRAW_WHILE_FULL = False
 
     def __new__(cls, *args, **kwargs):
         elm = super().__new__(cls)
@@ -172,6 +184,8 @@ class Element:
         return elm
 
     def __del__(self):
+        if self.isFullscreen:
+            self.unfullscreen()
         self.API.remove_elm(self)
     
     def draw(self):
@@ -179,6 +193,16 @@ class Element:
 
     def update(self):
         return False
+
+    def fullscreen(self):
+        self.API.fullscreen = self
+    
+    def unfullscreen(self):
+        self.API.fullscreen = None
+    
+    @property
+    def isFullscreen(self):
+        return self.API.fullscreen == self
 
     @property
     def _Screen(self) -> Screen:
@@ -201,6 +225,7 @@ class Window(Element):
     def __init__(self, x, y):
         self.x = x
         self.y = y
+        self._oldpos = None
         self._width = 0
         self._height = 0
         self._grabbed = None
@@ -215,15 +240,34 @@ class Window(Element):
     @property
     def height(self):
         return self._height + 2
+    
+    def fullscreen(self):
+        self._oldpos = (self.x, self.y)
+        self.x, self.y = 0, 0
+        return super().fullscreen()
+    
+    def unfullscreen(self):
+        if self._oldpos is not None:
+            self.x, self.y = self._oldpos
+        return super().unfullscreen()
 
     def _draw(self, lines):
-        width, height = max(strLen(i) for i in (lines or [''])), len(lines)
+        isFull = self.isFullscreen
+        if isFull:
+            width, height = self.API.get_terminal_size()
+            width -= 2
+            height -= 2
+        else:
+            width, height = max(strLen(i) for i in (lines or [''])), len(lines)
+        x, y = self.x, self.y
         self._width = width
         self._height = height
-        self._Write(self.x, self.y, '╭', '─'*width, 'X')
+        self._Write(x, y, '╭', '─'*(width-1), ('[' if not isFull else ']'), 'X')
         for idx, ln in enumerate(lines):
-            self._Write(self.x, self.y+idx+1, f'│{ln}│')
-        self._Write(self.x, self.y+height+1, '╰', '─'*width, '╯')
+            self._Write(x, y+idx+1, f'│{ln}{" "*(width-len(ln))}│')
+        for idx in range(len(lines), height):
+            self._Write(x, y+idx+1, '│'+' '*width+'│')
+        self._Write(x, y+height+1, '╰', '─'*width, '╯')
     
     def update(self):
         if self.API.LMB:
@@ -245,6 +289,12 @@ class Window(Element):
             if not self._moved and self._grabbed is not None:
                 if self._grabbed == (self.x+self.width-1, self.y):
                     self.__del__()
+                    return True
+                elif self._grabbed == (self.x+self.width-2, self.y):
+                    if self.isFullscreen:
+                        self.unfullscreen()
+                    else:
+                        self.fullscreen()
                     return True
             self._grabbed = None
 

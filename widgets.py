@@ -100,15 +100,19 @@ class TextInput(PositionedWidget):
         
 
         if self.cursor is not None:
+            if self.text == '':
+                newchar = '\033[39m|\033[90m'
+            else:
+                newchar = '|'
             self.fix_cursor(lines)
             chars = split(self._Screen.Get(x+self.cursor[0], y+self.cursor[1]))
             if round(time.time()*3)%3 != 0:
                 for idx in range(len(chars)):
                     if chars[idx][0] != '\033':
-                        chars[idx] = '|'
+                        chars[idx] = newchar
                         break
                 else:
-                    chars = ['|']+chars
+                    chars = [newchar]+chars
             else:
                 if all(i[0] == '\033' for i in chars):
                     chars = [' ']+chars

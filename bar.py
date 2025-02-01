@@ -10,6 +10,5 @@ class BarApp(ClickBarElm):
         self.callback = app
         self.appname = f'┤{app.__qualname__}├'
     
-    def _draw(self, x_off, y_off):
-        self._Write(x_off, y_off, self.appname)
-        return len(self.appname)
+    def _draw(self):
+        return self.appname

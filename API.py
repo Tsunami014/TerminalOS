@@ -217,15 +217,27 @@ class BarElm:
     
     def __del__(self):
         self.API.barElms.remove(self)
+    
+    def _draw(self) -> str:
+        """
+        Return a string of what to render in the bar.
+        """
+        return ''
 
     def draw(self, x_off: int, y_off: int):
-        """
-        Draw the element and return it's size.
-
-        Returns:
-            int: The size of this element.
-        """
-        return 0
+        """Do not override this func in subclasses unless needed to, instead use `_draw`"""
+        txt = self._draw()
+        if 3 <= self.BarNum <= 6:
+            if self.BarNum < 5:
+                self._Write(x_off, y_off, txt)
+            else:
+                self._Write(x_off, y_off-len(txt), txt)
+        else:
+            if self.BarNum in (1, 7):
+                self._Write(x_off, y_off, txt)
+            else:
+                self._Write(x_off-len(txt), y_off, txt)
+        return len(txt)
 
     @property
     def _Screen(self) -> Screen:
@@ -236,18 +248,9 @@ class BarElm:
         self._Screen.Write(x, y, *args)
 
 class ClickBarElm(BarElm):
-    def _draw(self, x_off: int, y_off: int):
-        """
-        Draw the element and return it's size.
-        
-        Returns:
-            int: The size of this element.
-        """
-        return 0
-
     def draw(self, x_off: int, y_off: int):
         """Do not override this func in subclasses unless needed to, instead use `_draw`"""
-        sze = self._draw(x_off, y_off)
+        sze = super().draw(x_off, y_off)
         mouse = self.API.Mouse
         if self.API.LMB:
             if self.BarNum in (1, 2, 7, 8):

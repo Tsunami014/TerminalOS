@@ -18,6 +18,7 @@ def main():
 
     bar.BarApp(apps.Help)
     bar.BarApp(apps.Test)
+    bar.BarCmd(8, "timedatectl | grep -P -o '(?<=Local time: )[a-zA-Z]+?[ \\-0-9:]+'")
 
     # clear_console()
     API.drawAll()
@@ -39,6 +40,7 @@ def main():
             stdin = Readable(sys.stdin)
             oldSize = API.get_terminal_size()
             while run:
+                API._prevMouse = [API.LMB, API.MMB, API.RMB]
                 while mouse[3]:
                     force_draw = True
                     data = mouse.read(3)
@@ -78,11 +80,11 @@ def main():
                     API.Screen.Clear()
                     force_draw = True
                 
-                if API.updateAll() or force_draw:
+                if API.updateAll() or force_draw or True:
                     API.drawAll()
                     
                     sze = API.get_terminal_size()
-                    for id in range(1, 8):
+                    for id in range(1, 9):
                         totSze = 1
                         for elm in API.barElms:
                             if elm.BarNum == id:

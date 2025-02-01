@@ -2,7 +2,7 @@ import select
 from queue import Queue, Empty
 from threading import Thread
 
-class Pollable:
+class Pollable: # Reads 3 bytes at a time
     def __init__(self, file):
         self.f = file
         self.fd = b''
@@ -11,11 +11,11 @@ class Pollable:
         self.readMoreData()
     
     def readMoreData(self):
-        while self.poll.poll(1):
-            self.fd += self.f.read(1)
+        while self.poll.poll(0):
+            self.fd += self.f.read(3)
 
     def read(self, size):
-        if len(self.fd) < size:
+        if len(self.fd) < size-1:
             self.readMoreData()
             if len(self.fd) < size:
                 return None

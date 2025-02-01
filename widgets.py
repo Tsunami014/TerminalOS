@@ -65,7 +65,7 @@ class Button(Text):
         # return [f'\033[100m{i}\033[49m' for i in lines] + ['\033[100;38;5;250m'+'_'*self.width+'\033[39;49m']
     
     def update(self):
-        if self.isHovering and self.API.LMB:
+        if self.isHovering and self.API.LMBP:
             self.callback()
             return True
         return False
@@ -138,7 +138,7 @@ class TextInput(PositionedWidget):
         return idx
     
     def update(self):
-        if self.API.LMB:
+        if self.API.LMBP:
             if self.isHovering:
                 rp = self.realPos
                 self.cursor = self.API.Mouse[0]-rp[0]-1, self.API.Mouse[1]-rp[1]-1

@@ -117,6 +117,7 @@ class TerminalAPI:
         self.Screen = Screen()
         self._oldScreen = Screen()
         self.barElms = []
+        self._prevMouse = [False, False, False]
     
     @property
     def Mouse(self):
@@ -131,6 +132,16 @@ class TerminalAPI:
     @property
     def RMB(self):
         return bool(self._MouseStatus & 2)
+
+    @property
+    def LMBP(self):
+        return self.LMB and not self._prevMouse[0]
+    @property
+    def MMBP(self):
+        return self.MMB and not self._prevMouse[1]
+    @property
+    def RMBP(self):
+        return self.RMB and not self._prevMouse[2]
     
     def updateAll(self):
         if self.fullscreen is not None:
@@ -252,7 +263,7 @@ class ClickBarElm(BarElm):
         """Do not override this func in subclasses unless needed to, instead use `_draw`"""
         sze = super().draw(x_off, y_off)
         mouse = self.API.Mouse
-        if self.API.LMB:
+        if self.API.LMBP:
             if self.BarNum in (1, 2, 7, 8):
                 if 0 <= mouse[0] - x_off < sze and mouse[1] == y_off:
                     self.callback()
@@ -428,10 +439,11 @@ class Window(Container):
                 ret = True
         if self.API.LMB:
             if self._grabbed is None:
-                mpos = self.API.Mouse
-                if mpos[1] == self.y and self.x <= mpos[0] < (self.x+self.width):
-                    self._moved = False
-                    self._grabbed = mpos
+                if self.API.LMBP:
+                    mpos = self.API.Mouse
+                    if mpos[1] == self.y and self.x <= mpos[0] < (self.x+self.width):
+                        self._moved = False
+                        self._grabbed = mpos
             else:
                 mpos = self.API.Mouse
                 if self._grabbed != mpos:
@@ -442,7 +454,7 @@ class Window(Container):
                     self._grabbed = mpos
                     return True
         else:
-            if not self._moved and self._grabbed is not None:
+            if not (self._moved or self._grabbed is None):
                 if self._grabbed == (self.x+self.width-1, self.y):
                     self.__del__()
                     return True

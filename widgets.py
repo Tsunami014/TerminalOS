@@ -66,7 +66,7 @@ class Button(Text):
     
     def update(self):
         if self.isHovering and self.API.LMB:
-            self.callback(self)
+            self.callback()
             return True
         return False
 

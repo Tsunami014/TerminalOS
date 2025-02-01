@@ -85,7 +85,9 @@ class TextInput(PositionedWidget):
         else:
             lines = findLines(self.text, self.max_width)
         
-        self.height = min(len(lines), self.max_height)
+        self.height = len(lines)
+        if self.max_height:
+            self.height = min(self.height, self.max_height)
         self.width = max(strLen(i) for i in lines)
         
         for idx, line in enumerate(lines[:self.height]):
@@ -94,7 +96,9 @@ class TextInput(PositionedWidget):
 
         if self.cursor is not None:
             self.fix_cursor(lines)
-            self._Write(self.x+self.cursor[0], self.y+self.cursor[1], ('\033[4m' if round(time.time())%2 == 0 else ''), self._Screen.Get(*self.cursor), '\033[24m')
+            self._Write(self.x+self.cursor[0], self.y+self.cursor[1], 
+                        ('\033[4m' if round(time.time())%2 == 0 else ''), self._Screen.Get(self.x+self.cursor[0], self.y+self.cursor[1]), '\033[24m'
+                        )
     
     def fix_cursor(self, lines=None):
         if self.text == '':

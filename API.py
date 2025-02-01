@@ -494,6 +494,11 @@ class Popup(Container):
         self._Write(self.x, self.y+height+1, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
     
     def update(self):
+        if self.API.LMBP and self.x is not None and self.y is not None:
+            mouse = self.API.Mouse
+            if self.x <= mouse[0] and self.y <= mouse[1]:
+                self.__del__()
+                return True
         if time.time() - self.start_time > self.duration:
             self.__del__()
             return True

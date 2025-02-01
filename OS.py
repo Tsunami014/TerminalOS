@@ -4,7 +4,7 @@ import termios
 import tty
 from IO import Pollable, Readable
 from API import TerminalAPI, Container
-import apps
+import coreApps
 import bar
 
 API = TerminalAPI()
@@ -14,8 +14,9 @@ def clear_console():
     sys.stdout.write('\033[2J\033[H')
 
 def main():
-    bar.BarApp(apps.Help)
-    bar.BarApp(apps.Test)
+    coreApps.loadExternals()
+    bar.BarApp(coreApps.Help)
+    bar.BarApp(coreApps.Test)
     bar.BarCmd(8, "timedatectl | grep -P -o '(?<=Local time: )[a-zA-Z]+?[ \\-0-9:]+'")
 
     # clear_console()

@@ -19,6 +19,7 @@ def main():
     def update_text(btn):
         btn.parent.widgets[0].text = 'Clicked!'
     Window(10, 18, wids.Text(0, 0, 'Hello, World!'), wids.Button(0, 1, 'Click me!', update_text))
+    Window(20, 5, wids.TextInput(0, 0, 20, 5, 'Type here!'))
     Popup(wids.Text(0, 0, 'This is a popup!\nHi!'), duration=5)
 
     # clear_console()
@@ -58,10 +59,22 @@ def main():
 
                     API._MouseStatus = status
                 
+                API.events = []
                 while stdin:
                     char = stdin.read(1)
-                    if char == '\x03' or char == '\x1b':  # Ctrl+C or ESC
+                    if char == '\x03':  # Ctrl+C
                         run = False
+                    elif char == '\x1b':  # Escape sequence detected
+                        second = stdin.read(1)
+                        if not second:
+                            run = False  # Individual ESC key pressed, end
+                        elif second == '[':
+                            third = stdin.read(1)
+                            API.events.append(char + second + third)
+                        else:
+                            API.events.append(char + second)
+                    else:
+                        API.events.append(char)
                 
                 if oldSize != (oldSize := API.get_terminal_size()):
                     clear_console()

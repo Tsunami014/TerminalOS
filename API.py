@@ -101,6 +101,7 @@ class Clipboard:
 
 class TerminalAPI:
     def __init__(self):
+        self.events = []
         self._elms = []
         self.fullscreen = None
         self._RawMouse = [0, 0]

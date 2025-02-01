@@ -6,6 +6,9 @@ import time
 __all__ = [
     'TerminalAPI',
 
+    'Position',
+        'StaticPos',
+        'RelativePos',
     'BarElm',
         'ClickBarElm',
     'Container',
@@ -22,6 +25,8 @@ def strLen(s):
     return len(ansi_escape.sub('', s))
 def ANSILen(s):
     return len(s) - len(ansi_escape.sub('', s))
+def split(s):
+    return re.findall(r'(?:\x1B\[[0-9;]*[a-zA-Z])|[^\x1B]', s)
 
 class Row:
     def __init__(self, data=''):
@@ -46,7 +51,7 @@ class Row:
     
     @staticmethod
     def split(s):
-        tokens = re.findall(r'(?:(?:\x1B\[[0-9;]*[a-zA-Z])?[^\x1B]?)', s)
+        tokens = re.findall(r'(?:(?:\x1B\[[0-9;]*[a-zA-Z])*[^\x1B]?)', s)
         return [i for i in tokens if i]
 
     def fix(self):
@@ -78,7 +83,7 @@ class Screen:
             if len(self.screen[y]) >= x:
                 self.screen[y] = Row(self.screen[y][:x] + Row.split(t) + self.screen[y][x+strLen(t):])
             else:
-                self.screen[y] += ' '*(x-len(self.screen[y])) + t
+                self.screen[y] += ' '*(x-strLen(str(self.screen[y]))) + t
         else:
             self.screen[y] = Row(' '*x+t)
     
@@ -205,6 +210,27 @@ class TerminalAPI:
     def get_terminal_size():
         rows, cols = os.popen('stty size', 'r').read().split()
         return int(cols), int(rows)
+
+class Position:
+    def __call__(self, size, parentSize, parentFull):
+        return (0, 0)
+
+class StaticPos(Position):
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+    
+    def __call__(self, size, parentSize, parentFull):
+        return (self.x, self.y)
+
+class RelativePos(Position):
+    def __init__(self, weight_x, weight_y, fallback_x, fallback_y):
+        self.weight = (weight_x, weight_y)
+        self.fallback = (fallback_x, fallback_y)
+    
+    def __call__(self, size, parentSize, parentFull):
+        if parentFull:
+            return (round((parentSize[0]-size[0])*self.weight[0]), round((parentSize[1]-size[1])*self.weight[1]))
+        return self.fallback
 
 class BarElm:
     API: TerminalAPI # Uses Container's API
@@ -363,12 +389,20 @@ class Widget:
         self._Screen.Write(x, y, *args)
 
 class PositionedWidget(Widget):
-    def __init__(self, x, y):
-        self.x, self.y = x, y
+    width: int
+    height: int
+
+    def __init__(self, pos: Position):
+        self._pos = pos
+    
+    @property
+    def pos(self):
+        return self._pos((self.width, self.height), (self.parent._width, self.parent._height), self.parent.isFullscreen)
     
     @property
     def realPos(self):
-        return self.x+self.parent.x, self.y+self.parent.y
+        x, y = self._pos((self.width, self.height), (self.parent._width, self.parent._height), self.parent.isFullscreen)
+        return x+self.parent.x, y+self.parent.y
 
 class Window(Container):
     def __init__(self, x, y, *widgets):
@@ -475,6 +509,7 @@ class Popup(Container):
         self.duration = duration
         self.start_time = time.time()
         self.x, self.y = None, None
+        self._width, self._height = 0, 0
     
     def draw(self):
         self.Screen.Clear()
@@ -487,11 +522,11 @@ class Popup(Container):
 
         cols, rows = self.API.get_terminal_size()
         self.x, self.y = cols - max(strLen(i) for i in lines) - 2, rows - len(lines) - 2
-        width, height = max(strLen(i) for i in (lines or [''])), len(lines)
-        self._Write(self.x, self.y, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
+        self._width, self._height = max(strLen(i) for i in (lines or [''])), len(lines)
+        self._Write(self.x, self.y, '\033[100;34;1m│\033[39m', ' '*self._width, ' \033[0m')
         for idx, ln in enumerate(lines):
-            self._Write(self.x, self.y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(width-len(ln))}\033[0m')
-        self._Write(self.x, self.y+height+1, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
+            self._Write(self.x, self.y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(self._width-len(ln))}\033[0m')
+        self._Write(self.x, self.y+self._height+1, '\033[100;34;1m│\033[39m', ' '*self._width, ' \033[0m')
     
     def update(self):
         if self.API.LMBP and self.x is not None and self.y is not None:

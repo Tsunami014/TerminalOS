@@ -1,4 +1,4 @@
-from API import PositionedWidget, strLen
+from API import PositionedWidget, strLen, split
 from string import printable
 import time
 
@@ -25,8 +25,8 @@ def findLines(text, max_width):
     return lines
 
 class Text(PositionedWidget):
-    def __init__(self, x, y, text, max_width=None):
-        super().__init__(x, y)
+    def __init__(self, pos, text, max_width=None):
+        super().__init__(pos)
         self.width, self.height = 0, 0
         self.text = text
         self.max_width = max_width
@@ -39,14 +39,16 @@ class Text(PositionedWidget):
         
         self.width, self.height = max(strLen(i) for i in lines), len(lines)
 
+        x, y = self.pos
+
         lines = self.processLines(lines)
         
         for idx, line in enumerate(lines):
-            self._Write(self.x, self.y+idx, line)
+            self._Write(x, y+idx, line)
 
 class Button(Text):
-    def __init__(self, x, y, text, callback, max_width=None):
-        super().__init__(x, y, text, max_width)
+    def __init__(self, pos, text, callback, max_width=None):
+        super().__init__(pos, text, max_width)
         self.callback = callback
     
     @property
@@ -71,8 +73,8 @@ class Button(Text):
         return False
 
 class TextInput(PositionedWidget):
-    def __init__(self, x, y, max_width=None, max_height=None, placeholder='', start=''):
-        super().__init__(x, y)
+    def __init__(self, pos, max_width=None, max_height=None, placeholder='', start=''):
+        super().__init__(pos)
         self.max_width = max_width
         self.max_height = max_height
         self.placeholder = placeholder
@@ -84,21 +86,33 @@ class TextInput(PositionedWidget):
             lines = ['\033[90m'+self.placeholder+'\033[39m']
         else:
             lines = findLines(self.text, self.max_width)
+        self.width = max(strLen(i) for i in lines)+1
+        lines = [f'\033[4m{i + ' '*(self.width-len(i))}\033[24m' for i in lines]
         
         self.height = len(lines)
         if self.max_height:
             self.height = min(self.height, self.max_height)
-        self.width = max(strLen(i) for i in lines)
+
+        x, y = self.pos
         
         for idx, line in enumerate(lines[:self.height]):
-            self._Write(self.x, self.y+idx, line)
+            self._Write(x, y+idx, line)
         
 
         if self.cursor is not None:
             self.fix_cursor(lines)
-            self._Write(self.x+self.cursor[0], self.y+self.cursor[1], 
-                        ('\033[4m' if round(time.time())%2 == 0 else ''), self._Screen.Get(self.x+self.cursor[0], self.y+self.cursor[1]), '\033[24m'
-                        )
+            chars = split(self._Screen.Get(x+self.cursor[0], y+self.cursor[1]))
+            if round(time.time()*3)%3 != 0:
+                for idx in range(len(chars)):
+                    if chars[idx][0] != '\033':
+                        chars[idx] = '|'
+                        break
+                else:
+                    chars = ['|']+chars
+            else:
+                if all(i[0] == '\033' for i in chars):
+                    chars = [' ']+chars
+            self._Write(x+self.cursor[0], y+self.cursor[1], *chars)
     
     def fix_cursor(self, lines=None):
         if self.text == '':
@@ -107,7 +121,7 @@ class TextInput(PositionedWidget):
         if lines is None:
             lines = findLines(self.text, self.max_width)
         self.cursor = [self.cursor[0], min(self.cursor[1], self.height)]
-        self.cursor[0] = min(self.cursor[0], len(lines[self.cursor[1]]))
+        self.cursor[0] = min(max(self.cursor[0], 0), len(lines[self.cursor[1]]))
     
     @property
     def isHovering(self):
@@ -121,11 +135,11 @@ class TextInput(PositionedWidget):
             idx = 0
             y = 0
             for paragraph in self.text.split('\n'):
-                while len(paragraph) > self.max_width:
+                while strLen(paragraph) > self.max_width:
                     space_index = paragraph.rfind(' ', 0, self.max_width)
                     if space_index == -1:
                         space_index = self.max_width
-                    idx += len(paragraph[:space_index])
+                    idx += space_index
                     y += 1
                     if y >= self.cursor[1]:
                         break
@@ -138,7 +152,7 @@ class TextInput(PositionedWidget):
                     break
             idx += self.cursor[0]
         else:
-            idx = len("\n".join(self.text.split('\n')[:self.cursor[1]]))+self.cursor[0]
+            idx = len("".join(self.text.split('\n')[:self.cursor[1]]))+self.cursor[1]+self.cursor[0]
         return idx
     
     def update(self):
@@ -146,6 +160,7 @@ class TextInput(PositionedWidget):
             if self.isHovering:
                 rp = self.realPos
                 self.cursor = self.API.Mouse[0]-rp[0]-1, self.API.Mouse[1]-rp[1]-1
+                self.fix_cursor()
                 return True
             else:
                 self.cursor = None
@@ -169,8 +184,6 @@ class TextInput(PositionedWidget):
                         # Backspace
                         did_something = True
                         idx = self.cursorIdx
-                        if self.cursor != [0, 0]:
-                            self.text = self.text[:idx-1] + self.text[idx:]
                         if self.cursor[0] == 0:
                             if self.cursor[1] != 0:
                                 lines = findLines(self.text, self.max_width)
@@ -178,6 +191,8 @@ class TextInput(PositionedWidget):
                                 self.cursor[0] = len(lines[self.cursor[1]])
                         else:
                             self.cursor[0] -= 1
+                        if idx != 0:
+                            self.text = self.text[:idx-1] + self.text[idx:]
                     elif char[:2] == '\x1b[':
                         # An escape sequence
                         if char[2] == 'A':

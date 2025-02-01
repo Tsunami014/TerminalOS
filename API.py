@@ -6,6 +6,8 @@ import time
 __all__ = [
     'TerminalAPI',
 
+    'BarElm',
+        'ClickBarElm',
     'Container',
         'Window',
             'App',
@@ -107,20 +109,14 @@ class Clipboard:
 class TerminalAPI:
     def __init__(self):
         self.events = []
-        self._elms = []
+        self.elms = []
         self.fullscreen = None
         self._RawMouse = [0, 0]
         self._MouseStatus = 0
         self._MouseSensitivity = [0.249, 0.13]
         self.Screen = Screen()
         self._oldScreen = Screen()
-    
-    def add_elm(self, window):
-        self._elms.append(window)
-    
-    def remove_elm(self, window):
-        if window in self._elms:
-            self._elms.remove(window)
+        self.barElms = []
     
     @property
     def Mouse(self):
@@ -138,12 +134,12 @@ class TerminalAPI:
     
     def updateAll(self):
         if self.fullscreen is not None:
-            for elm in self._elms:
+            for elm in self.elms:
                 if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
                     if elm.update():
                         return True
         redraw = False
-        for elm in self._elms:
+        for elm in self.elms:
             if elm.update():
                 redraw = True
         return redraw
@@ -152,11 +148,11 @@ class TerminalAPI:
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
         self.Screen.Clear()
         if self.fullscreen is not None:
-            for elm in self._elms:
+            for elm in self.elms:
                 if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
                     elm.draw()
         else:
-            for elm in self._elms:
+            for elm in self.elms:
                 elm.draw()
     
     def print(self):
@@ -197,19 +193,88 @@ class TerminalAPI:
         rows, cols = os.popen('stty size', 'r').read().split()
         return int(cols), int(rows)
 
+class BarElm:
+    API: TerminalAPI # Uses Container's API
+    BarNum: int
+    """
+    The bar number to attach to.
+
+    ```
+     111 222 
+    3       4
+    3       4
+
+    5       6
+    5       6
+     777 888 
+    ```
+    """
+    def __new__(cls, *args, **kwargs):
+        elm = super().__new__(cls)
+        elm.API = Container.API
+        elm.API.barElms.append(elm)
+        return elm
+    
+    def __del__(self):
+        self.API.barElms.remove(self)
+
+    def draw(self, x_off: int, y_off: int):
+        """
+        Draw the element and return it's size.
+
+        Returns:
+            int: The size of this element.
+        """
+        return 0
+
+    @property
+    def _Screen(self) -> Screen:
+        return self.API.Screen
+
+    def _Write(self, x, y, *args):
+        """Writes "".join(args) at (x, y)"""
+        self._Screen.Write(x, y, *args)
+
+class ClickBarElm(BarElm):
+    def _draw(self, x_off: int, y_off: int):
+        """
+        Draw the element and return it's size.
+        
+        Returns:
+            int: The size of this element.
+        """
+        return 0
+
+    def draw(self, x_off: int, y_off: int):
+        """Do not override this func in subclasses unless needed to, instead use `_draw`"""
+        sze = self._draw(x_off, y_off)
+        mouse = self.API.Mouse
+        if self.API.LMB:
+            if self.BarNum in (1, 2, 7, 8):
+                if 0 <= mouse[0] - x_off < sze and mouse[1] == y_off:
+                    self.callback()
+            else:
+                if 0 <= mouse[1] - y_off < sze and mouse[0] == x_off:
+                    self.callback()
+        return sze
+    
+    def callback(self):
+        pass
+
 class Container:
     API: TerminalAPI # API class variable will be set here, going down to all Element subclasses to use!
     DRAW_WHILE_FULL = False
 
     def __new__(cls, *args, **kwargs):
         elm = super().__new__(cls)
-        cls.API.add_elm(elm)
+        cls.API.elms.append(elm)
         return elm
 
     def __del__(self):
         if self.isFullscreen:
             self.unfullscreen()
-        self.API.remove_elm(self)
+        if self in self.API.elms:
+            self.API.elms.remove(self)
     
     def draw(self):
         pass

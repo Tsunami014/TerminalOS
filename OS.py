@@ -5,6 +5,7 @@ import tty
 from IO import Pollable, Readable
 from API import TerminalAPI, Container, Border
 import apps
+import bar
 
 API = TerminalAPI()
 Container.API = API
@@ -15,8 +16,8 @@ def clear_console():
 def main():
     Border()
 
-    apps.Help()
-    apps.Test()
+    bar.BarApp(apps.Help)
+    bar.BarApp(apps.Test)
 
     # clear_console()
     API.drawAll()
@@ -79,10 +80,36 @@ def main():
                 
                 if API.updateAll() or force_draw:
                     API.drawAll()
-                    mp = API.Mouse
+                    
                     sze = API.get_terminal_size()
+                    for id in range(1, 8):
+                        totSze = 1
+                        for elm in API.barElms:
+                            if elm.BarNum == id:
+                                if id in (1, 7):
+                                    x = totSze
+                                elif id in (2, 8):
+                                    x = sze[0]-totSze
+                                elif id in (3, 5):
+                                    x = 0
+                                else:
+                                    x = sze[0]-1
+                                
+                                if id in (3, 4):
+                                    y = totSze
+                                elif id in (5, 6):
+                                    y = sze[1]-totSze
+                                elif id in (1, 2):
+                                    y = 0
+                                else:
+                                    y = sze[1]-1
+                                
+                                totSze += elm.draw(x, y)
+                    
+                    mp = API.Mouse
                     if mp[0] not in (-1, sze[0]) and mp[1] not in (-1, sze[1]+2):
                         API.Screen.Write(*mp, '\033[7m'+API.Screen.Get(*mp)+'\033[27m')
+
                     API.printAll()#print()
                     sys.stdout.flush()
                     force_draw = False

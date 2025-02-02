@@ -5,7 +5,6 @@ import tty
 from IO import Pollable, Readable
 from API import TerminalAPI, Container
 import core
-import bar
 
 API = TerminalAPI()
 Container.API = API
@@ -14,10 +13,7 @@ def clear_console():
     sys.stdout.write('\033[2J\033[H')
 
 def main():
-    core.loadExternals()
-    for c in core.__all__:
-        bar.BarApp(getattr(core, c))
-    bar.BarCmd(8, "timedatectl | grep -P -o '(?<=Local time: )[a-zA-Z]+?[ \\-0-9:]+'")
+    core.resetApps(API)
 
     # clear_console()
     API.drawAll()

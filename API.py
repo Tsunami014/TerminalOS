@@ -273,7 +273,8 @@ class BarElm:
         return elm
     
     def __del__(self):
-        self.API.barElms.remove(self)
+        if self in self.API.barElms:
+            self.API.barElms.remove(self)
     
     def _draw(self) -> str:
         """

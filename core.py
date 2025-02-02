@@ -93,32 +93,32 @@ class SoftwareManager(FullscreenApp):
             idx = txt.find('"""', 3)
             data = [i.split(': ') for i in txt[3:idx].split('\n') if i]
             fields = {i[0].strip(): ': '.join(i[1:]) for i in data if len(i) >= 2}
-            if 'Name' not in fields:
-                fields['Name'] = name
-            endFields = {}
-            keys = (
-                'Author', 'Email', 'Version', 'License'
-            )
-            for key in keys:
-                if key not in fields:
-                    endFields[key] = 'N/A'
-                else:
-                    endFields[key] = fields[key]
-            self.widgets = self.widgets[:2]
-            self.widgets.extend([
-                wids.Button(StaticPos(0, 0), '<', self.search),
-                wids.Text(RelativePos(0.5, -1, 0, 7), 
-                            f'\033[1m{fields["Name"]}\033[0m\n\033[3m{fields["Description"] if 'Description' in fields else ""}\033[23m\n\n'+\
-                            '\n'.join(f'{k}: {v}' for k, v in endFields.items())
-                )
-            ])
-
-            if os.path.exists(f'{PATH}/{name}.py'):
-                self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 12+len(keys)), 'Remove', lambda: self.remove(name, txt)))
-            else:
-                self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 12+len(keys)), 'Install', lambda: self.install(name, txt)))
         else:
-            Popup(wids.Text(StaticPos(0, 0), 'Failed to fetch data!\nNo docstring found!'), duration=10)
+            fields = {}
+        if 'Name' not in fields:
+            fields['Name'] = name
+        endFields = {}
+        keys = (
+            'Author', 'Email', 'Version', 'License'
+        )
+        for key in keys:
+            if key not in fields:
+                endFields[key] = 'N/A'
+            else:
+                endFields[key] = fields[key]
+        self.widgets = self.widgets[:2]
+        self.widgets.extend([
+            wids.Button(StaticPos(0, 0), '<', self.search),
+            wids.Text(RelativePos(0.5, -1, 0, 7), 
+                        f'\033[1m{fields["Name"]}\033[0m\n\033[3m{fields["Description"] if 'Description' in fields else ""}\033[23m\n\n'+\
+                        '\n'.join(f'{k}: {v}' for k, v in endFields.items())
+            )
+        ])
+
+        if os.path.exists(f'{PATH}/{name}.py'):
+            self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 12+len(keys)), 'Remove', lambda: self.remove(name, txt)))
+        else:
+            self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 12+len(keys)), 'Install', lambda: self.install(name, txt)))
 
     def info(self, name):
         try:

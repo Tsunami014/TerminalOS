@@ -120,7 +120,7 @@ class TerminalAPI:
         self.fullscreen = None
         self._RawMouse = [0, 0]
         self._MouseStatus = 0
-        self._MouseSensitivity = [0.249, 0.13]
+        self._MouseSensitivity = [0.13, 0.065]
         self.Screen = Screen()
         self._oldScreen = Screen()
         self.barElms = []
@@ -449,7 +449,10 @@ class Window(Container):
         for widget in self.widgets:
             widget.draw()
         
-        lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
+        if self.Screen.screen == {}:
+            lines = []
+        else:
+            lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
         for idx, line in self.Screen.screen.items():
             lines[idx] = str(line)
 
@@ -550,7 +553,10 @@ class FullscreenWindow(Window):
         for widget in self.widgets:
             widget.draw()
         
-        lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
+        if self.Screen.screen == {}:
+            lines = []
+        else:
+            lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
         for idx, line in self.Screen.screen.items():
             lines[idx] = str(line)
 

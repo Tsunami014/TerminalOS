@@ -59,14 +59,14 @@ def main():
                     if char == '\x03':  # Ctrl+C
                         run = False
                     elif char == '\x1b':  # Escape sequence detected
-                        second = stdin.read(1)
-                        if not second:
-                            run = False  # Individual ESC key pressed, end
-                        elif second == '[':
-                            third = stdin.read(1)
-                            API.events.append(char + second + third)
-                        else:
-                            API.events.append(char + second)
+                        sequence = char
+                        while True:
+                            next_char = stdin.read(1)
+                            sequence += next_char
+                            # Generally ends on alphadigit or ~
+                            if next_char.isalpha() or next_char == '~':
+                                break
+                        API.events.append(sequence)
                     else:
                         API.events.append(char)
                 

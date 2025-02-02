@@ -89,9 +89,10 @@ class TextInput(PositionedWidget):
     
     def draw(self):
         if self.text == '':
-            lines = ['\033[90m'+self.placeholder+'\033[39m']
+            lines = findLines(self.placeholder, self.max_width)
+            lines = [f'\033[90m{i}\033[39m' for i in lines]
         else:
-            lines = findLines(self.text, self.max_width)
+            lines = findLines(self.text, self.max_width-1)
         self.width = max(strLen(i) for i in lines)+1
         lines = [f'\033[4m{i + ' '*(self.width-len(i))}\033[24m' for i in lines]
         
@@ -129,7 +130,7 @@ class TextInput(PositionedWidget):
             self.cursor = [0, 0]
             return
         if lines is None:
-            lines = findLines(self.text, self.max_width)
+            lines = findLines(self.text, self.max_width-1)
         self.cursor = [self.cursor[0], min(max(self.cursor[1], 0), self.height)]
         if self.max_height is not None:
             self.cursor[1] = min(self.cursor[1], self.max_height)

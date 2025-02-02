@@ -34,6 +34,10 @@ class Test(App):
 class SoftwareManager(FullscreenApp):
     def init_widgets(self):
         return [
-            wids.Text(RelativePos(0.5, -1, 0, 1), 'Software Manager\nSearch above to find software to install!'),
+            wids.Text(RelativePos(0.5, 0.3, 0, 1), 'Software Manager\nSearch above to find software to install!'),
             wids.TextInput(RelativePos(0.5, -1, 0, 0), max_width=20, max_height=1, placeholder='Search...'),
+            wids.Button(RelativePos(0.5, -1, 0, 3), 'SEARCH!', self.search),
         ]
+    
+    def search(self):
+        pass

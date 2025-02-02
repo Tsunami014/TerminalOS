@@ -453,12 +453,17 @@ class Window(Container):
         x, y = self.x, self.y
         self._width = width
         self._height = height
-        self._Write(x, y, '╭', '─'*(width-1), ('[' if not isFull else ']'), 'X')
-        for idx, ln in enumerate(lines):
-            self._Write(x, y+idx+1, f'│{ln}{" "*(width-strLen(ln))}│')
-        for idx in range(len(lines), height):
-            self._Write(x, y+idx+1, '│'+' '*width+'│')
-        self._Write(x, y+height+1, '╰', '─'*width, '╯')
+        if isFull:
+            self._Write(width, 0, ']X')
+            for idx, ln in enumerate(lines):
+                self._Write(x+1, y+idx+1, f'{ln}{" "*(width-strLen(ln))}')
+        else:
+            self._Write(x, y, '╭', '─'*(width-1), '[X')
+            for idx, ln in enumerate(lines):
+                self._Write(x, y+idx+1, f'│{ln}{" "*(width-strLen(ln))}│')
+            for idx in range(len(lines), height):
+                self._Write(x, y+idx+1, '│'+' '*width+'│')
+            self._Write(x, y+height+1, '╰', '─'*width, '╯')
     
     @property
     def width(self):
@@ -523,8 +528,8 @@ class FullscreenWindow(Window):
     """
     A Window that MUST ALWAYS be fullscreen.
     """
-    def __init__(self, x, y, *widgets):
-        super().__init__(x, y, *widgets)
+    def __init__(self, *widgets):
+        super().__init__(0, 0, *widgets)
         self.fullscreen()
     
     def unfullscreen(self):
@@ -546,15 +551,11 @@ class FullscreenWindow(Window):
             height -= 2
         else:
             width, height = max(strLen(i) for i in (lines or [''])), len(lines)
-        x, y = self.x, self.y
         self._width = width
         self._height = height
-        self._Write(x, y, '╭', '─'*width, 'X')
+        self._Write(width+1, 0, 'X')
         for idx, ln in enumerate(lines):
-            self._Write(x, y+idx+1, f'│{ln}{" "*(width-strLen(ln))}│')
-        for idx in range(len(lines), height):
-            self._Write(x, y+idx+1, '│'+' '*width+'│')
-        self._Write(x, y+height+1, '╰', '─'*width, '╯')
+            self._Write(1, idx+1, f'{ln}{" "*(width-strLen(ln))}')
 
     def __del__(self):
         if self.isFullscreen:
@@ -646,5 +647,5 @@ class FullscreenApp(App):
     Win: FullscreenWindow
     def __new__(cls, *args, **kwargs):
         inst = object.__new__(cls, *args, **kwargs)
-        inst.Win = FullscreenWindow(0, 0, *inst.init_widgets())
+        inst.Win = FullscreenWindow(*inst.init_widgets())
         return inst

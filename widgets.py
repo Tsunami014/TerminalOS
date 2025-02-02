@@ -31,17 +31,12 @@ class Text(PositionedWidget):
         self.text = text
         self.max_width = max_width
     
-    def processLines(self, lines):
-        return lines
-    
     def draw(self):
         lines = findLines(self.text, self.max_width)
         
         self.width, self.height = max(strLen(i) for i in lines), len(lines)
 
         x, y = self.pos
-
-        lines = self.processLines(lines)
         
         for idx, line in enumerate(lines):
             self._Write(x, y+idx, line)
@@ -55,16 +50,26 @@ class Button(Text):
     def isHovering(self):
         rp = self.realPos
         return self.API.Mouse[0] > rp[0] and self.API.Mouse[0] <= rp[0]+self.width and \
-               self.API.Mouse[1] > rp[1] and self.API.Mouse[1] <= rp[1]+self.height+1
+               self.API.Mouse[1] > rp[1] and self.API.Mouse[1] <= rp[1]+self.height
     
-    def processLines(self, lines):
+    def draw(self):
+        lines = findLines(self.text, self.max_width)
+        
+        self.width, self.height = max(strLen(i) for i in lines)+2, len(lines)+1
+
         if self.isHovering:
-            return [f'\033[45m{i}\033[49m' for i in lines] + ['\033[45m'+'_'*self.width+'\033[49m']
-        return [f'\033[44m{i}\033[49m' for i in lines] + ['\033[44m'+'_'*self.width+'\033[49m']
+            lines = [f'\033[45m {i}{" "*(self.width-strLen(i)-1)}\033[49m' for i in lines] + ['\033[45m'+'_'*self.width+'\033[49m']
+        else:
+            lines = [f'\033[44m {i}{" "*(self.width-strLen(i)-1)}\033[49m' for i in lines] + ['\033[44m'+'_'*self.width+'\033[49m']
         # The linux vt doesn't support advanced colours :'(
         # if self.isHovering:
-        #     return [f'\033[38;5;250;48;5;237m{i}\033[39;49m' for i in lines] + ['\033[48;5;237;38;5;246m'+'_'*self.width+'\033[39;49m']
-        # return [f'\033[100m{i}\033[49m' for i in lines] + ['\033[100;38;5;250m'+'_'*self.width+'\033[39;49m']
+        #     lines = [f'\033[38;5;250;48;5;237m {i} \033[39;49m' for i in lines] + ['\033[48;5;237;38;5;246m'+'_'*self.width+'\033[39;49m']
+        # lines = [f'\033[100m {i} \033[49m' for i in lines] + ['\033[100;38;5;250m'+'_'*self.width+'\033[39;49m']
+
+        x, y = self.pos
+        
+        for idx, line in enumerate(lines):
+            self._Write(x, y+idx, line)
     
     def update(self):
         if self.isHovering and self.API.LMBP:

@@ -13,17 +13,3 @@ Run `OS.py` to start the OS. To exit press `Esc` or `Ctrl+C`.
 
 ## To add more apps
 Download some python files, **MAKING FULL CARE AS TO NOT DOWNLOAD MALICIOUS CODE**, as this will run any code it sees. Put them in the `external` folder (make one if it doesn't exist) in this direcroty and they will be added to the OS.
-
-### To make an app
-Make a python file that has a unique name and make sure it has things like `bar.register` or it won't do anything. Also, at the start of the file, have a docstring with the format:
-```python
-"""
-Name: <name>
-Description: <description>
-Author: <author>
-Email: <email>
-Version: <version> (optional)
-"""
-# Rest of code here
-```
-*Without this it will not appear in any app download managers.*

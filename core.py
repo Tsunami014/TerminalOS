@@ -1,5 +1,4 @@
 from difflib import get_close_matches
-from threading import Thread
 from API import App, FullscreenApp, Popup, StaticPos, RelativePos
 import widgets as wids
 import os
@@ -68,18 +67,56 @@ class SoftwareManager(FullscreenApp):
             suggests.extend(filter(lambda k: query in k, opts))
             suggests = order(suggests)
         return suggests[:maxSuggests]
-    
-    def startSearch(self):
-        t = Thread(target=self.search, daemon=True)
-        t.start()
+
+    def info(self, name):
+        try:
+            request = requests.get(f'https://raw.githubusercontent.com/Tsunami014/TerminalOSApps/refs/heads/main/{name}.py')
+        except ConnectionError as e:
+            Popup(wids.Text(StaticPos(0, 0), f'{type(e).__qualname__}: failed to fetch data!\nReason: {str(e)}', max_width=40), duration=10)
+            return
+        if request.status_code == 200:
+            txt = request.text.lstrip()
+            if txt.startswith('"""'):
+                idx = txt.find('"""', 3)
+                data = [i.split(': ') for i in txt[3:idx].split('\n') if i]
+                fields = {i[0].strip(): ': '.join(i[1:]) for i in data if len(i) >= 2}
+                if 'Name' not in fields:
+                    fields['Name'] = name
+                endFields = {}
+                keys = (
+                    'Author', 'Email', 'Version', 'License'
+                )
+                for key in keys:
+                    if key not in fields:
+                        endFields[key] = 'N/A'
+                    else:
+                        endFields[key] = fields[key]
+                self.widgets = self.widgets[:2]
+                self.widgets.extend([
+                    wids.Button(StaticPos(0, 0), '<', self.search),
+                    wids.Text(RelativePos(0.5, -1, 0, 7), 
+                              f'\033[1m{fields["Name"]}\033[0m\n\033[3m{fields["Description"] if 'Description' in fields else ""}\033[23m\n\n'+\
+                                '\n'.join(f'{k}: {v}' for k, v in endFields.items())
+                    ),
+                    wids.Button(RelativePos(0.5, -1, 0, 12+len(keys)), 'Install', lambda: Popup(wids.Text(StaticPos(0, 0), 'This feature is not yet implemented!')))
+                ])
+
+            else:
+                Popup(wids.Text(StaticPos(0, 0), 'Failed to fetch data!\nNo docstring found!'))
+        else:
+            Popup(wids.Text(StaticPos(0, 0), f'Failed to fetch data!\nStatus code: {request.status_code}\nReason: {request.reason}'))
     
     def search(self):
-        request = requests.get('https://tsunami014.github.io/TerminalOSApps/')
+        try:
+            request = requests.get('https://raw.githubusercontent.com/Tsunami014/TerminalOSApps/refs/heads/main/README.md')
+        except Exception as e:
+            Popup(wids.Text(StaticPos(0, 0), f'{type(e).__qualname__}: failed to fetch data!\nReason: {str(e)}', max_width=40), duration=10)
+            return
         if request.status_code == 200:
             txt = request.text
-            idx = txt.find('Apps list')+len('Apps list</h1>\n<ul>\n')
-            data = txt[idx:txt.find('</ul>', idx)]
-            names = re.findall(r'<li><a href=[^>]+>([^<]+)', data)
+            idx = txt.find('\n# Apps list')+len('\n# Apps list\n')
+            data = txt[idx:txt.find('##', idx)]
+            names = re.findall(r'- \[([^[]+)]', data)
             lowerednms = [name.lower() for name in names]
             suggests = self.suggests(lowerednms)
             self.widgets = self.widgets[:2]
@@ -87,7 +124,7 @@ class SoftwareManager(FullscreenApp):
             if suggests:
                 for idx, name in enumerate(suggests):
                     realname = names[lowerednms.index(name)]
-                    self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 7+idx), realname, lambda: Popup(wids.Text(StaticPos(0, 0), f'You clicked on {realname}!'))))
+                    self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 7+idx), realname, lambda name=realname: self.info(name)))
             else:
                 Popup(wids.Text(StaticPos(0, 0), 'No results found!\nTry a different search term.'))
         else:

@@ -370,6 +370,16 @@ class ContainerWidgets(list):
     
     def append(self, elm):
         super().append(elm(self.parent))
+    
+    def extend(self, elms):
+        super().extend([i(self.parent) for i in elms])
+    
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            new = ContainerWidgets(self.parent)
+            new += super().__getitem__(idx)
+            return new
+        return super().__getitem__(idx)
 
 class Widget:
     parent: Container
@@ -380,13 +390,12 @@ class Widget:
             elm = sup_new(cls)
             elm.parent = parent
             elm.__init__(*args, **kwargs)
-            if hasattr(parent, 'widgets'):
-                parent.widgets.append(elm)
             return elm
         return new
     
     def __del__(self):
-        self.parent.widgets.remove(self)
+        if self in self.parent.widgets:
+            self.parent.widgets.remove(self)
     
     @property
     def API(self):
@@ -642,6 +651,13 @@ class App:
     @property
     def widgets(self):
         return self.Win.widgets
+    
+    @widgets.setter
+    def widgets(self, val):
+        if isinstance(val, ContainerWidgets):
+            self.Win.widgets = val
+        else:
+            self.Win.widgets = ContainerWidgets(self.Win, val)
 
 class FullscreenApp(App):
     Win: FullscreenWindow

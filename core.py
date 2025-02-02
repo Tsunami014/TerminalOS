@@ -4,10 +4,9 @@ import os
 import importlib
 
 __all__ = [
-    'loadExternals',
-
     'Help',
-    'Test'
+    'Test',
+    'SoftwareManager',
 ]
 
 def loadExternals():
@@ -30,4 +29,11 @@ class Test(App):
             wids.Text(StaticPos(0, 0), 'Hello, World!'), 
             wids.Button(StaticPos(0, 1), 'Click me!', lambda: Popup(wids.Text(StaticPos(0, 0), 'This is a popup!\nHi!'))),
             wids.TextInput(RelativePos(1, 0, len('Hello, World! '), 0), placeholder='Type here: ')
+        ]
+
+class SoftwareManager(App):
+    def init_widgets(self):
+        return [
+            wids.Text(RelativePos(0.5, -1, 0, 1), 'Software Manager\nSearch above to find software to install!'),
+            wids.TextInput(RelativePos(0.5, -1, 0, 0), max_width=20, max_height=1, placeholder='Search...'),
         ]

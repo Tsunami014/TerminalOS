@@ -15,8 +15,8 @@ def clear_console():
 
 def main():
     core.loadExternals()
-    bar.BarApp(core.Help)
-    bar.BarApp(core.Test)
+    for c in core.__all__:
+        bar.BarApp(getattr(core, c))
     bar.BarCmd(8, "timedatectl | grep -P -o '(?<=Local time: )[a-zA-Z]+?[ \\-0-9:]+'")
 
     # clear_console()

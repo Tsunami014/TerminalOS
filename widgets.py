@@ -124,7 +124,7 @@ class TextInput(PositionedWidget):
             return
         if lines is None:
             lines = findLines(self.text, self.max_width)
-        self.cursor = [self.cursor[0], min(self.cursor[1], self.height)]
+        self.cursor = [self.cursor[0], min(max(self.cursor[1], 0), min(self.height, self.max_height))]
         self.cursor[0] = min(max(self.cursor[0], 0), len(lines[self.cursor[1]]))
     
     @property
@@ -178,12 +178,16 @@ class TextInput(PositionedWidget):
                         if char == '\r':
                             char = '\n'
                         idx = self.cursorIdx
-                        self.text = self.text[:idx] + char + self.text[idx:]
                         if char == '\n':
+                            lines = findLines(self.text, self.max_width)
+                            if len(lines)+1 > self.max_height:
+                                did_something = False
+                                continue
                             self.cursor[1] += 1
                             self.cursor[0] = 0
                         else:
                             self.cursor[0] += 1
+                        self.text = self.text[:idx] + char + self.text[idx:]
                     elif char == '\x7f':
                         # Backspace
                         did_something = True

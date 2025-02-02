@@ -225,6 +225,8 @@ class StaticPos(Position):
 class RelativePos(Position):
     """
     Gets a weighted position if the parent is fullscreen, otherwise uses the fallback.
+
+    -1 for weight means use fallback.
     """
     def __init__(self, weight_x, weight_y, fallback_x, fallback_y):
         self.weight = (weight_x, weight_y)
@@ -233,7 +235,15 @@ class RelativePos(Position):
     def __call__(self, size, winSzefun, parentFull):
         if parentFull:
             winSze = winSzefun()
-            return (round((winSze[0]-size[0]-2)*self.weight[0]), round((winSze[1]-size[1])*self.weight[1]))
+            if self.weight[0] == -1:
+                x = self.fallback[0]
+            else:
+                x = round((winSze[0]-size[0]-2)*self.weight[0])
+            if self.weight[1] == -1:
+                y = self.fallback[1]
+            else:
+                y = round((winSze[1]-size[1])*self.weight[1])
+            return (x, y)
         return self.fallback
 
 class BarElm:

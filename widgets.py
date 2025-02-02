@@ -130,7 +130,9 @@ class TextInput(PositionedWidget):
             return
         if lines is None:
             lines = findLines(self.text, self.max_width)
-        self.cursor = [self.cursor[0], min(max(self.cursor[1], 0), min(self.height, self.max_height))]
+        self.cursor = [self.cursor[0], min(max(self.cursor[1], 0), self.height)]
+        if self.max_height is not None:
+            self.cursor[1] = min(self.cursor[1], self.max_height)
         self.cursor[0] = min(max(self.cursor[0], 0), len(lines[self.cursor[1]]))
     
     @property
@@ -186,7 +188,7 @@ class TextInput(PositionedWidget):
                         idx = self.cursorIdx
                         if char == '\n':
                             lines = findLines(self.text, self.max_width)
-                            if len(lines)+1 > self.max_height:
+                            if self.max_height is not None and len(lines)+1 > self.max_height:
                                 did_something = False
                                 continue
                             self.cursor[1] += 1

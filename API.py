@@ -120,7 +120,7 @@ class TerminalAPI:
         self.fullscreen = None
         self._RawMouse = [0, 0]
         self._MouseStatus = 0
-        self._MouseSensitivity = [0.13, 0.065]
+        self._MouseSensitivity = [0.1, 0.05]
         self.Screen = Screen()
         self._oldScreen = Screen()
         self.barElms = []

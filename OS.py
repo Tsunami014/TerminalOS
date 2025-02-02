@@ -40,12 +40,16 @@ def main():
                     force_draw = True
                     data = mouse.read(3)
                     status, dx, dy = data[0], data[1], data[2]
+                    xsin = 1
+                    ysin = 2
                     if dx > 127:
                         dx -= 256
+                        xsin = -1
                     if dy > 127:
                         dy -= 256
-                    API._RawMouse[0] += dx*API._MouseSensitivity[0]
-                    API._RawMouse[1] -= dy*API._MouseSensitivity[1]
+                        ysin = -1
+                    API._RawMouse[0] += abs(dx**1.25)*API._MouseSensitivity[0]*xsin
+                    API._RawMouse[1] -= abs(dy**1.25)*API._MouseSensitivity[1]*ysin
 
                     tSize = API.get_terminal_size()
                     API._RawMouse[0] = max(-1, min(tSize[0], API._RawMouse[0]))

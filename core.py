@@ -29,7 +29,10 @@ def loadExternals():
     for file in os.listdir(PATH):
         if file.endswith('.py'):
             ext = importlib.import_module('external.'+file[:-3])
-            ext.load()
+            if hasattr(ext, 'load'):
+                ext.load()
+            else:
+                Popup(wids.Text(StaticPos(0, 0), f"Couldn't load external {file[:-3]}\nDoes not have a load method."), duration=5)
 
 class Help(App):
     def init_widgets(self):

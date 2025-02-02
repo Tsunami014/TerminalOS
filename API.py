@@ -13,10 +13,12 @@ __all__ = [
         'ClickBarElm',
     'Container',
         'Window',
-            'App',
+            'FullscreenWindow',
         'Popup',
     'Widget',
         'PositionedWidget',
+    'App',
+        'FullscreenApp',
 ]
 
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -150,10 +152,12 @@ class TerminalAPI:
     
     def updateAll(self):
         if self.fullscreen is not None:
+            redraw = False
             for elm in self.elms:
                 if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
                     if elm.update():
-                        return True
+                        redraw = True
+            return redraw
         redraw = False
         for elm in self.elms:
             if elm.update():
@@ -489,6 +493,8 @@ class Window(Container):
                 mpos = self.API.Mouse
                 if self._grabbed != mpos:
                     self._moved = True
+                    if self.isFullscreen:
+                        self.unfullscreen()
                     diff = [self._grabbed[0]-mpos[0], self._grabbed[1]-mpos[1]]
                     self.x -= diff[0]
                     self.y -= diff[1]
@@ -512,6 +518,76 @@ class Window(Container):
     def __str__(self):
         return '<Window object>'
     def __repr__(self): return str(self)
+
+class FullscreenWindow(Window):
+    """
+    A Window that MUST ALWAYS be fullscreen.
+    """
+    def __init__(self, x, y, *widgets):
+        super().__init__(x, y, *widgets)
+        self.fullscreen()
+    
+    def unfullscreen(self):
+        pass
+
+    def draw(self):
+        self.Screen.Clear()
+        for widget in self.widgets:
+            widget.draw()
+        
+        lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
+        for idx, line in self.Screen.screen.items():
+            lines[idx] = str(line)
+
+        isFull = self.isFullscreen
+        if isFull:
+            width, height = self.API.get_terminal_size()
+            width -= 2
+            height -= 2
+        else:
+            width, height = max(strLen(i) for i in (lines or [''])), len(lines)
+        x, y = self.x, self.y
+        self._width = width
+        self._height = height
+        self._Write(x, y, '╭', '─'*width, 'X')
+        for idx, ln in enumerate(lines):
+            self._Write(x, y+idx+1, f'│{ln}{" "*(width-strLen(ln))}│')
+        for idx in range(len(lines), height):
+            self._Write(x, y+idx+1, '│'+' '*width+'│')
+        self._Write(x, y+height+1, '╰', '─'*width, '╯')
+
+    def __del__(self):
+        if self.isFullscreen:
+            super().unfullscreen()
+        if self in self.API.elms:
+            self.API.elms.remove(self)
+    
+    def update(self):
+        if not self.isFullscreen:
+            if self.API.fullscreen is None:
+                self.fullscreen()
+        ret = False
+        for wid in self.widgets:
+            if wid.update():
+                ret = True
+        if self.API.LMB:
+            if self._grabbed is None:
+                if self.API.LMBP:
+                    mpos = self.API.Mouse
+                    if mpos[1] == self.y and self.x <= mpos[0] < (self.x+self.width):
+                        self._moved = False
+                        self._grabbed = mpos
+            elif not self._moved:
+                if self._grabbed != self.API.Mouse:
+                    self._moved = True
+        else:
+            if not (self._moved or self._grabbed is None):
+                if self._grabbed == (self.x+self.width-1, self.y):
+                    self.__del__()
+                    return True
+            self._grabbed = None
+        
+        return ret
 
 class Popup(Container):
     DRAW_WHILE_FULL = True
@@ -565,3 +641,10 @@ class App:
     @property
     def widgets(self):
         return self.Win.widgets
+
+class FullscreenApp(App):
+    Win: FullscreenWindow
+    def __new__(cls, *args, **kwargs):
+        inst = object.__new__(cls, *args, **kwargs)
+        inst.Win = FullscreenWindow(0, 0, *inst.init_widgets())
+        return inst

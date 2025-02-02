@@ -80,6 +80,7 @@ class TextInput(PositionedWidget):
         self.placeholder = placeholder
         self.text = start
         self.cursor = None
+        self.width, self.height = 0, 0
     
     def draw(self):
         if self.text == '':

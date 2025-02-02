@@ -1,4 +1,4 @@
-from API import App, Popup, StaticPos, RelativePos
+from API import App, FullscreenApp, Popup, StaticPos, RelativePos
 import widgets as wids
 import os
 import importlib
@@ -31,7 +31,7 @@ class Test(App):
             wids.TextInput(RelativePos(1, 0, len('Hello, World! '), 0), placeholder='Type here: ')
         ]
 
-class SoftwareManager(App):
+class SoftwareManager(FullscreenApp):
     def init_widgets(self):
         return [
             wids.Text(RelativePos(0.5, -1, 0, 1), 'Software Manager\nSearch above to find software to install!'),

@@ -469,7 +469,7 @@ class Window(Container):
         if isFull:
             self._Write(width, 0, ']X')
             for idx, ln in enumerate(lines):
-                self._Write(x+1, y+idx+1, f'{ln}{" "*(width-strLen(ln))}')
+                self._Write(x+1, y+idx+1, ln)
         else:
             self._Write(x, y, '╭', '─'*(width-1), '[X')
             for idx, ln in enumerate(lines):
@@ -536,6 +536,66 @@ class Window(Container):
     def __str__(self):
         return '<Window object>'
     def __repr__(self): return str(self)
+
+class ResizableWindow(Window):
+    def __init__(self, x, y, startWid, startHei, *widgets):
+        super().__init__(x, y, *widgets)
+        self.size = (startWid, startHei)
+        self._grabbingSize = None
+    
+    def draw(self):
+        self.Screen.Clear()
+        for widget in self.widgets:
+            widget.draw()
+        
+        if self.Screen.screen == {}:
+            lines = []
+        else:
+            lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
+        for idx, line in self.Screen.screen.items():
+            lines[idx] = str(line)
+        
+        x, y = self.x, self.y
+        if self.isFullscreen:
+            width, height = self.API.get_terminal_size()
+            self._Write(width-2, 0, ']X')
+            for idx, ln in enumerate(lines):
+                self._Write(x+1, y+idx+1, ln)
+        else:
+            self._Write(x, y, '╭', '─'*(self.size[0]-3), '[X')
+            for idx, ln in enumerate(lines[:self.size[1]-2]):
+                self._Write(x, y+idx+1, f'│{ln[:self.size[0]-2]}{" "*(self.size[0]-2-strLen(ln))}│')
+            for idx in range(len(lines), self.size[1]-2):
+                self._Write(x, y+idx+1, '│'+' '*(self.size[0]-2)+'│')
+            self._Write(x, y+self.size[1]-1, '╰', '─'*(self.size[0]-2), '+')
+    
+    @property
+    def width(self):
+        if self.isFullscreen:
+            return self.API.get_terminal_size()[0]
+        return self.size[0]
+    @property
+    def height(self):
+        if self.isFullscreen:
+            return self.API.get_terminal_size()[1]
+        return self.size[1]
+
+    def update(self):
+        if not self.isFullscreen:
+            if self.API.LMB:
+                if self.API.LMBP:
+                    mp = self.API.Mouse
+                    if mp[0] == self.x+self.size[0]-1 and mp[1] == self.y+self.size[1]-1:
+                        self._grabbingSize = mp
+                elif self._grabbingSize is not None:
+                    mp = self.API.Mouse
+                    if mp != self._grabbingSize:
+                        self._grabbingSize = mp
+                        self.size = (max(mp[0]-self.x+1, 3), max(mp[1]-self.y+1, 2))
+                        return True
+            else:
+                self._grabbingSize = None
+        return super().update()
 
 class FullscreenWindow(Window):
     """
@@ -646,10 +706,10 @@ class Popup(Container):
         return super().update()
 
 class App:
-    Win: Window
+    Win: ResizableWindow
     def __new__(cls, *args, **kwargs):
         inst = super().__new__(cls, *args, **kwargs)
-        inst.Win = Window(0, 0, *inst.init_widgets())
+        inst.Win = ResizableWindow(0, 0, 40, 10, *inst.init_widgets())
         return inst
     
     def init_widgets(self) -> list[Widget]:

@@ -13,7 +13,16 @@ def findLines(text, max_width):
         lines = []
         for paragraph in text.split('\n'):
             while strLen(paragraph) > max_width:
-                space_index = paragraph.rfind(' ', 0, max_width)
+                space_index = -1
+                idx = 0
+                realIdx = 0
+                spl = split(paragraph)
+                while realIdx < max_width and idx < len(spl):
+                    if spl[idx][0] != '\033':
+                        realIdx += 1
+                    if spl[idx] == ' ':
+                        space_index = realIdx
+                    idx += 1
                 if space_index == -1:
                     space_index = max_width
                 lines.append(paragraph[:space_index])

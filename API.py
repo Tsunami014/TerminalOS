@@ -473,9 +473,10 @@ class Window(Container):
         else:
             self._Write(x, y, '╭', '─'*(width-1), '[X')
             for idx, ln in enumerate(lines):
-                self._Write(x, y+idx+1, f'│{ln}{" "*(width-strLen(ln))}│')
+                self._Write(x, y+idx+1, '│', *split(ln)[:self.size[0]-2], " "*(width-strLen(ln)), '\033[0m│')
+            t = '│'+' '*width+'│'
             for idx in range(len(lines), height):
-                self._Write(x, y+idx+1, '│'+' '*width+'│')
+                self._Write(x, y+idx+1, t)
             self._Write(x, y+height+1, '╰', '─'*width, '╯')
     
     @property
@@ -564,9 +565,10 @@ class ResizableWindow(Window):
         else:
             self._Write(x, y, '╭', '─'*(self.size[0]-3), '[X')
             for idx, ln in enumerate(lines[:self.size[1]-2]):
-                self._Write(x, y+idx+1, f'│{ln[:self.size[0]-2]}{" "*(self.size[0]-2-strLen(ln))}│')
+                self._Write(x, y+idx+1, '│', *split(ln)[:self.size[0]-2], " "*(self.size[0]-2-strLen(ln)), '\033[0m│')
+            t = '│'+' '*(self.size[0]-2)+'│'
             for idx in range(len(lines), self.size[1]-2):
-                self._Write(x, y+idx+1, '│'+' '*(self.size[0]-2)+'│')
+                self._Write(x, y+idx+1, t)
             self._Write(x, y+self.size[1]-1, '╰', '─'*(self.size[0]-2), '+')
     
     @property

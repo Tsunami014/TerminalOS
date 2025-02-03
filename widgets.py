@@ -109,7 +109,7 @@ class TextInput(PositionedWidget):
         else:
             lines = findLines(self.text, self.max_width)
         self.width = max(strLen(i) for i in lines)+1
-        lines = [f'\033[4m{i + ' '*(self.width-len(i))}\033[24m' for i in lines]
+        lines = [f'\033[4m{i + ' '*(self.width-strLen(i))}\033[24m' for i in lines]
         
         self.height = len(lines)
         if self.max_height:
@@ -120,7 +120,6 @@ class TextInput(PositionedWidget):
         for idx, line in enumerate(lines[:self.height]):
             self._Write(x, y+idx, line)
         
-
         if self.cursor is not None:
             if self.text == '' and self.placeholder != '':
                 newchar = '\033[39m|\033[90m'
@@ -140,16 +139,32 @@ class TextInput(PositionedWidget):
                     chars = [' ']+chars
             self._Write(x+self.cursor[0], y+self.cursor[1], *chars)
     
-    def fix_cursor(self, lines=None):
+    def fix_cursor(self, lines=None, justCapX=False):
         if self.text == '':
             self.cursor = [0, 0]
             return
         if lines is None:
             lines = findLines(self.text, self.max_width)
-        self.cursor = [self.cursor[0], min(max(self.cursor[1], 0), self.height)]
-        if self.max_height is not None:
-            self.cursor[1] = min(self.cursor[1], self.max_height)
-        self.cursor[0] = min(max(self.cursor[0], 0), len(lines[self.cursor[1]]))
+        self.cursor = list(self.cursor)
+        max_hei = min(len(lines)-1, self.max_height) if self.max_height is not None else (len(lines)-1)
+        self.cursor[1] = min(max(self.cursor[1], 0), max_hei)
+        if justCapX:
+            self.cursor[0] = min(max(self.cursor[0], 0), len(lines[self.cursor[1]]))
+        else:
+            if self.cursor[0] < 0:
+                self.cursor[1] -= 1
+                if self.cursor[1] < 0:
+                    self.cursor[1] = 0
+                    self.cursor[0] = 0
+                else:
+                    self.cursor[0] = len(lines[self.cursor[1]])
+            if self.cursor[0] > len(lines[self.cursor[1]]):
+                self.cursor[1] += 1
+                if self.cursor[1] > max_hei:
+                    self.cursor[1] = max_hei
+                    self.cursor[0] = len(lines[self.cursor[1]])
+                else:
+                    self.cursor[0] = 0
     
     @property
     def isHovering(self):
@@ -187,8 +202,9 @@ class TextInput(PositionedWidget):
         if self.API.LMBP:
             if self.isHovering:
                 rp = self.realPos
-                self.cursor = self.API.Mouse[0]-rp[0]-1, self.API.Mouse[1]-rp[1]-1
-                self.fix_cursor()
+                mp = self.API.Mouse
+                self.cursor = mp[0]-rp[0]-1, mp[1]-rp[1]-1
+                self.fix_cursor(justCapX=True)
                 return True
             else:
                 self.cursor = None
@@ -201,6 +217,9 @@ class TextInput(PositionedWidget):
                         did_something = True
                         if char == '\r':
                             char = '\n'
+                        if char == '\t':
+                            self.API.events.extend([' ' for _ in range(4)])
+                            continue
                         idx = self.cursorIdx
                         if char == '\n':
                             lines = findLines(self.text, self.max_width)
@@ -216,15 +235,10 @@ class TextInput(PositionedWidget):
                         # Backspace
                         did_something = True
                         idx = self.cursorIdx
-                        if self.cursor[0] == 0:
-                            if self.cursor[1] != 0:
-                                lines = findLines(self.text, self.max_width)
-                                self.cursor[1] -= 1
-                                self.cursor[0] = len(lines[self.cursor[1]])
-                        else:
-                            self.cursor[0] -= 1
                         if idx != 0:
                             self.text = self.text[:idx-1] + self.text[idx:]
+                            self.cursor[0] -= 1
+                            self.fix_cursor()
                     elif char[:2] == '\x1b[':
                         # An escape sequence
                         if char[2] == 'A':

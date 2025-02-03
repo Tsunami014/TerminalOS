@@ -66,11 +66,16 @@ def main():
                         sequence = char
                         while True:
                             next_char = stdin.read(1)
+                            if not next_char:
+                                break
                             sequence += next_char
                             # Generally ends on alphadigit or ~
                             if next_char.isalpha() or next_char == '~':
                                 break
-                        API.events.append(sequence)
+                        if sequence == '\x1b': # Just the escape key
+                            run = False
+                        else:
+                            API.events.append(sequence)
                     else:
                         API.events.append(char)
                 

@@ -149,7 +149,7 @@ class SoftwareManager(FullscreenApp):
             if suggests:
                 for idx, name in enumerate(suggests):
                     realname = names[lowerednms.index(name)]
-                    self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 7+idx), realname, lambda name=realname: self.info(name)))
+                    self.widgets.append(wids.Button(RelativePos(0.5, -1, 0, 7+idx*3), realname, lambda name=realname: self.info(name)))
             else:
                 Popup(wids.Text(StaticPos(0, 0), 'No results found!\nTry a different search term.'), duration=10)
         else:

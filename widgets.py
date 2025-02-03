@@ -1,4 +1,4 @@
-from API import PositionedWidget, strLen, split
+from API import PositionedWidget, Clipboard, strLen, split
 from string import printable
 import time
 
@@ -231,14 +231,16 @@ class TextInput(PositionedWidget):
                         else:
                             self.cursor[0] += 1
                         self.text = self.text[:idx] + char + self.text[idx:]
-                    elif char == '\x7f':
-                        # Backspace
+                    elif char == '\x7f': # Backspace
                         did_something = True
                         idx = self.cursorIdx
                         if idx != 0:
                             self.text = self.text[:idx-1] + self.text[idx:]
                             self.cursor[0] -= 1
                             self.fix_cursor()
+                    elif char == '\x16': # Ctrl+V
+                        did_something = True
+                        self.API.events.extend(list(Clipboard.read()))
                     elif char[:2] == '\x1b[':
                         # An escape sequence
                         if char[2] == 'A':

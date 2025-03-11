@@ -25,6 +25,7 @@ void reset_terminal_settings() {
 }
 
 int main(void) {
+    printf("\033[2J\033[H");
     // Create necessary directories
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);

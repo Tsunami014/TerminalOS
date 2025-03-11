@@ -167,16 +167,17 @@ class TerminalAPI:
                     if hei >= 2:
                         self.layout.insert(self.focus[1], [[], math.ceil(hei)])
                         self.focus[1] += 1
-                        self.layout[self.focus[1]][1] = math.floor(hei)
+                        if self.focus[1] < len(self.layout)-1:
+                            self.layout[self.focus[1]][1] = math.floor(hei)
                         changed_now = True
                 elif ev == '\x01': # Ctrl+A
                     if self.focus[0] == len(self.layout[self.focus[1]][0]):
                         wid = (sze[0]-sum(self.layout[self.focus[1]][0]+[0]))/2
                     else:
                         wid = self.layout[self.focus[1]][0][self.focus[0]]/2
-                        if wid >= 2:
+                        if wid >= 6:
                             self.layout[self.focus[1]][0][self.focus[0]] = math.floor(wid)
-                    if wid >= 2:
+                    if wid >= 6:
                         self.layout[self.focus[1]][0].insert(self.focus[0], math.ceil(wid))
                         changed_now = True
                 elif ev == '\x04': # Ctrl+D

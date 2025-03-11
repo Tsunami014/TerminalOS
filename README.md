@@ -80,7 +80,7 @@ exec tail -n +3 $0
 
 menuentry "Terminal OS"{
             search --set=root --file /boot/vmlinuz
-            linux /boot/vmlinuz debug root=/dev/ram0 rdinit=/init
+            linux /boot/vmlinuz root=/dev/ram0 rdinit=/init
             initrd /boot/initrd-tos.img
 }
 EOF
@@ -146,7 +146,7 @@ exec tail -n +3 $0
 
 menuentry "Terminal OS"{
             search --set=root --file /boot/vmlinuz
-            linux /boot/vmlinuz debug root=/dev/ram0 rdinit=/init
+            linux /boot/vmlinuz root=/dev/ram0 rdinit=/init
             initrd /boot/initrd-tos.img
 }
 EOF

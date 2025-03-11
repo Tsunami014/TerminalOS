@@ -1,6 +1,7 @@
 from enum import Enum
-import sys
+import math
 import re
+import sys
 import time
 import shutil
 
@@ -128,7 +129,8 @@ class TerminalAPI:
         self.events = []
         self.fullscreen = None
         self.windows = []
-        self.layout = [([10], 10)]
+        self.focus = [0, 0]
+        self.layout = [[[20], 10], [[40, 60], None]]
         self.mode = ScreenModes.LAYOUT
         self.Screen = Screen()
         self._oldScreen = Screen()
@@ -148,7 +150,100 @@ class TerminalAPI:
                     redraw = True
             return redraw
         elif self.mode == ScreenModes.LAYOUT:
-            return False
+            sze = self.get_terminal_size()
+            changed = False
+            for ev in self.events:
+                changed_now = False
+
+                # Creation - ctrl+<>
+                if ev == '\x17': # Ctrl+W
+                    hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
+                    if hei >= 2:
+                        self.layout.insert(self.focus[1], [[], math.floor(hei)])
+                        self.layout[self.focus[1]+1][1] = math.ceil(hei)
+                    changed_now = True
+                elif ev == '\x13': # Ctrl+S
+                    hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
+                    if hei >= 2:
+                        self.layout.insert(self.focus[1], [[], math.ceil(hei)])
+                        self.focus[1] += 1
+                        self.layout[self.focus[1]][1] = math.floor(hei)
+                        changed_now = True
+                elif ev == '\x01': # Ctrl+A
+                    if self.focus[0] == len(self.layout[self.focus[1]][0]):
+                        wid = (sze[0]-sum(self.layout[self.focus[1]][0]+[0]))/2
+                    else:
+                        wid = self.layout[self.focus[1]][0][self.focus[0]]/2
+                        if wid >= 2:
+                            self.layout[self.focus[1]][0][self.focus[0]] = math.floor(wid)
+                    if wid >= 2:
+                        self.layout[self.focus[1]][0].insert(self.focus[0], math.ceil(wid))
+                        changed_now = True
+                elif ev == '\x04': # Ctrl+D
+                    if self.focus[0] == len(self.layout[self.focus[1]][0]):
+                        wid = (sze[0]-sum(self.layout[self.focus[1]][0]+[0]))/2
+                    else:
+                        wid = self.layout[self.focus[1]][0][self.focus[0]]/2
+                        if wid >= 2:
+                            self.layout[self.focus[1]][0][self.focus[0]] = math.ceil(wid)
+                    if wid >= 2:
+                        self.layout[self.focus[1]][0].insert(self.focus[0], math.floor(wid))
+                        self.focus[0] += 1
+                        changed_now = True
+                
+                # Deletion - ctrl+alt+<>
+                elif ev == '\x1b\x17': # Ctrl+alt+W
+                    if self.focus[1] != 0:
+                        self.focus[1] -= 1
+                        _, eh = self.layout.pop(self.focus[1])
+                        if self.layout[self.focus[1]][1]:
+                            self.layout[self.focus[1]][1] += eh
+                        changed_now = True
+                elif ev == '\x1b\x13': # Ctrl+alt+S
+                    if self.focus[1] < len(self.layout)-1:
+                        _, eh = self.layout.pop(self.focus[1]+1)
+                        self.layout[self.focus[1]][1] += eh
+                        changed_now = True
+                elif ev == '\x1b\x01': # Ctrl+alt+A
+                    if self.focus[0] > 0:
+                        self.focus[0] -= 1
+                        ew = self.layout[self.focus[1]][0].pop(self.focus[0])
+                        if self.focus[0] < len(self.layout[self.focus[1]][0]):
+                            self.layout[self.focus[1]][0][self.focus[0]] += ew
+                        changed_now = True
+                elif ev == '\x1b\x04': # Ctrl+alt+D
+                    if self.focus[0] == len(self.layout[self.focus[1]][0])-1:
+                        self.layout[self.focus[1]][0].pop(-1)
+                    elif self.focus[0] < len(self.layout[self.focus[1]][0])-1:
+                        ew = self.layout[self.focus[1]][0].pop(self.focus[0]+1)
+                        self.layout[self.focus[1]][0][self.focus[0]] += ew
+                    changed_now = True
+
+                # Arrow keys switch between
+                elif ev in ('\x1b['+i for i in 'ABCD'):
+                    changed_now = True
+                    if ev[-1] == 'A': # Up
+                        self.focus[1] -= 1
+                    elif ev[-1] == 'B': # Down
+                        self.focus[1] += 1
+                    elif ev[-1] == 'D': # Left
+                        self.focus[0] -= 1
+                    elif ev[-1] == 'C': # Right
+                        self.focus[0] += 1
+                
+                if changed_now:
+                    if self.focus[1] < 0:
+                        self.focus[1] = 0
+                    elif self.focus[1] >= len(self.layout):
+                        self.focus[1] = len(self.layout)-1
+                    
+                    if self.focus[0] < 0:
+                        self.focus[0] = 0
+                    elif self.focus[0] > len(self.layout[self.focus[1]][0]):
+                        self.focus[0] = len(self.layout[self.focus[1]][0])
+                
+                changed = changed or changed_now
+            return changed
         return False
 
     def resetScreens(self):
@@ -179,10 +274,13 @@ class TerminalAPI:
         if self.mode == ScreenModes.LAYOUT:
             sy = 0
             for row, h in self.layout:
-                self.Screen.Write(0, sy+h, '├')
-                self.Screen.Write(sze[0]-1, sy+h, '┤')
-                for ix in range(1, sze[0]-1):
-                    self.Screen.Write(ix, sy+h, '─')
+                if h is None:
+                    h = sze[1]-sy-1
+                else:
+                    for ix in range(1, sze[0]-1):
+                        self.Screen.Write(ix, sy+h, '─')
+                    self.Screen.Write(0, sy+h, '├')
+                    self.Screen.Write(sze[0]-1, sy+h, '┤')
                 sx = 0
                 for x in row:
                     sx += x
@@ -191,6 +289,16 @@ class TerminalAPI:
                     for iy in range(1+sy, sy+h):
                         self.Screen.Write(sx, iy, '│')
                 sy += h
+            
+            hs = [i[1] for i in self.layout[:-1]]
+            hs += [sze[1]-sum(hs+[0])]
+            ws = self.layout[self.focus[1]][0].copy()
+            ws += [sze[0]-sum(ws+[0])]
+            for y in range(sum(hs[:self.focus[1]]+[0]), sum(hs[:self.focus[1]+1]+[0])+1):
+                x = sum(ws[:self.focus[0]]+[0])
+                self.Screen.Write(x, y, '\033[7m'+self.Screen.Get(x, y))
+                x = min(sum(ws[:self.focus[0]+1]+[0]), sze[0]-1)
+                self.Screen.Write(x, y, self.Screen.Get(x, y)+'\033[0m')
     
     def print(self):
         self._print_borders()

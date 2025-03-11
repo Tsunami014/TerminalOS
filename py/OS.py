@@ -37,8 +37,6 @@ while True:
     if API.updateAll() or force_redraw:
         API.resetScreens()
         
-        API.Screen.Write(10, 10, 'Hello! \033[1mBOLD\033[0m \033[7mINVERSE\033[0m \033[4mUNDERLINE\033[0m \033[5mBLINK\033[0m')
-
         API.drawAll()
         API.printAll()#print()
         sys.stdout.flush()

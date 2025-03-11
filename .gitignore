@@ -2,3 +2,4 @@
 
 rootfs/*
 Python-3.12.0/*
+initrd-tos.img

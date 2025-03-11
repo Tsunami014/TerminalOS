@@ -131,6 +131,7 @@ class TerminalAPI:
         self.windows = []
         self.focus = [0, 0]
         self.layout = [[[], None]]
+        self.grid = [[None]]
         self.mode = ScreenModes.LAYOUT
         self.Screen = Screen()
         self._oldScreen = Screen()
@@ -159,6 +160,7 @@ class TerminalAPI:
                 if ev == '\x17': # Ctrl+W
                     hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
                     if hei >= 2:
+                        self.grid.insert(self.focus[1], [None])
                         self.layout.insert(self.focus[1], [[], math.floor(hei)])
                         if self.focus[1]+1 < len(self.layout)-1:
                             self.layout[self.focus[1]+1][1] = math.ceil(hei)
@@ -166,6 +168,7 @@ class TerminalAPI:
                 elif ev == '\x13': # Ctrl+S
                     hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
                     if hei >= 2:
+                        self.grid.insert(self.focus[1], [None])
                         self.layout.insert(self.focus[1], [[], math.ceil(hei)])
                         self.focus[1] += 1
                         if self.focus[1] < len(self.layout)-1:
@@ -179,6 +182,7 @@ class TerminalAPI:
                         if wid >= 6:
                             self.layout[self.focus[1]][0][self.focus[0]] = math.floor(wid)
                     if wid >= 6:
+                        self.grid[self.focus[1]].insert(self.focus[0], None)
                         self.layout[self.focus[1]][0].insert(self.focus[0], math.ceil(wid))
                         changed_now = True
                 elif ev == '\x04': # Ctrl+D
@@ -189,6 +193,7 @@ class TerminalAPI:
                         if wid >= 2:
                             self.layout[self.focus[1]][0][self.focus[0]] = math.ceil(wid)
                     if wid >= 2:
+                        self.grid[self.focus[1]].insert(self.focus[0], None)
                         self.layout[self.focus[1]][0].insert(self.focus[0], math.floor(wid))
                         self.focus[0] += 1
                         changed_now = True
@@ -197,26 +202,31 @@ class TerminalAPI:
                 elif ev == '\x1b\x17': # Ctrl+alt+W
                     if self.focus[1] != 0:
                         self.focus[1] -= 1
+                        self.grid.pop(self.focus[1])
                         _, eh = self.layout.pop(self.focus[1])
                         if self.layout[self.focus[1]][1]:
                             self.layout[self.focus[1]][1] += eh
                         changed_now = True
                 elif ev == '\x1b\x13': # Ctrl+alt+S
                     if self.focus[1] < len(self.layout)-1:
+                        self.grid.pop(self.focus[1])
                         _, eh = self.layout.pop(self.focus[1]+1)
                         self.layout[self.focus[1]][1] += eh
                         changed_now = True
                 elif ev == '\x1b\x01': # Ctrl+alt+A
                     if self.focus[0] > 0:
                         self.focus[0] -= 1
+                        self.grid[self.focus[1]].pop(self.focus[0])
                         ew = self.layout[self.focus[1]][0].pop(self.focus[0])
                         if self.focus[0] < len(self.layout[self.focus[1]][0]):
                             self.layout[self.focus[1]][0][self.focus[0]] += ew
                         changed_now = True
                 elif ev == '\x1b\x04': # Ctrl+alt+D
                     if self.focus[0] == len(self.layout[self.focus[1]][0])-1:
+                        self.grid[self.focus[1]].pop(-1)
                         self.layout[self.focus[1]][0].pop(-1)
                     elif self.focus[0] < len(self.layout[self.focus[1]][0])-1:
+                        self.grid[self.focus[1]].pop(self.focus[0]+1)
                         ew = self.layout[self.focus[1]][0].pop(self.focus[0]+1)
                         self.layout[self.focus[1]][0][self.focus[0]] += ew
                     changed_now = True
@@ -255,8 +265,15 @@ class TerminalAPI:
                             self.layout[self.focus[1]][0][self.focus[0]] += 1
                             changed_now = True
                     elif self.focus[0] > 0 and self.layout[self.focus[1]][0][self.focus[0]-1] > 3:
-                            self.layout[self.focus[1]][0][self.focus[0]-1] -= 1
-                            changed_now = True
+                        self.layout[self.focus[1]][0][self.focus[0]-1] -= 1
+                        changed_now = True
+                
+                elif ev == 'h': # Testing
+                    self.grid[self.focus[1]][self.focus[0]] = 'HELLO\nworld'
+                    changed_now = True
+                elif ev == 'b': # Testing
+                    self.grid[self.focus[1]][self.focus[0]] = 'BYE\nbyeeee'
+                    changed_now = True
 
                 # Arrow keys switch between
                 elif ev in ('\x1b['+i for i in 'ABCD'):
@@ -312,7 +329,7 @@ class TerminalAPI:
         self.Screen.Write(0, sze[1]-1, '└', '─' * (sze[0]-2), '┘')
         if self.mode == ScreenModes.LAYOUT:
             sy = 0
-            for row, h in self.layout:
+            for yidx, (row, h) in enumerate(self.layout):
                 if h is None:
                     h = sze[1]-sy-1
                 else:
@@ -321,12 +338,25 @@ class TerminalAPI:
                     self.Screen.Write(0, sy+h, '├')
                     self.Screen.Write(sze[0]-1, sy+h, '┤')
                 sx = 0
-                for x in row:
-                    sx += x
-                    self.Screen.Write(sx, sy, '┬')
-                    self.Screen.Write(sx, sy+h, '┴')
-                    for iy in range(1+sy, sy+h):
-                        self.Screen.Write(sx, iy, '│')
+                for xidx, w in enumerate(row+[None]):
+                    txt = self.grid[yidx][xidx]
+                    if txt is not None:
+                        if w is None:
+                            w = sze[0]-sx-1
+                        lines = txt.split('\n')
+                        midy = sy+max(h-len(lines), 0)//2
+                        for idx, ln in enumerate(lines[:h]):
+                            self.Screen.Write(sx+max(w-len(ln), 0)//2, midy+idx, ln[:w])
+                    if w is not None:
+                        sx += w
+                        chr = self.Screen.Get(sx, sy)
+                        if chr == '┴':
+                            self.Screen.Write(sx, sy, '┼')
+                        elif chr != '+':
+                            self.Screen.Write(sx, sy, '┬')
+                        self.Screen.Write(sx, sy+h, '┴')
+                        for iy in range(1+sy, sy+h):
+                            self.Screen.Write(sx, iy, '│')
                 sy += h
             
             hs = [i[1] for i in self.layout[:-1]]

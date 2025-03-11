@@ -130,7 +130,7 @@ class TerminalAPI:
         self.fullscreen = None
         self.windows = []
         self.focus = [0, 0]
-        self.layout = [[[20], 10], [[40, 60], None]]
+        self.layout = [[[], None]]
         self.mode = ScreenModes.LAYOUT
         self.Screen = Screen()
         self._oldScreen = Screen()
@@ -160,7 +160,8 @@ class TerminalAPI:
                     hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
                     if hei >= 2:
                         self.layout.insert(self.focus[1], [[], math.floor(hei)])
-                        self.layout[self.focus[1]+1][1] = math.ceil(hei)
+                        if self.focus[1]+1 < len(self.layout)-1:
+                            self.layout[self.focus[1]+1][1] = math.ceil(hei)
                     changed_now = True
                 elif ev == '\x13': # Ctrl+S
                     hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
@@ -219,6 +220,43 @@ class TerminalAPI:
                         ew = self.layout[self.focus[1]][0].pop(self.focus[0]+1)
                         self.layout[self.focus[1]][0][self.focus[0]] += ew
                     changed_now = True
+                
+                # Just letters resize
+                elif ev == 'w':
+                    if self.focus[1] < len(self.layout)-1:
+                        if self.layout[self.focus[1]][1] > 3:
+                            self.layout[self.focus[1]][1] -= 1
+                            changed_now = True
+                    elif self.focus[1] > 0:
+                        h = sze[1]-sum(i[1] for i in self.layout if i[1])
+                        if h > 3:
+                            self.layout[self.focus[1]-1][1] += 1
+                        changed_now = True
+                elif ev == 's':
+                    if self.focus[1] < len(self.layout)-1:
+                        if sum(i[1] for i in self.layout if i[1])+1<(sze[1]-3):
+                            self.layout[self.focus[1]][1] += 1
+                            changed_now = True
+                    elif self.focus[1] > 0 and self.layout[self.focus[1]-1][1] > 3:
+                        self.layout[self.focus[1]-1][1] -= 1
+                        changed_now = True
+                elif ev == 'a':
+                    if self.focus[0] < len(self.layout[self.focus[1]][0]) and self.layout[self.focus[1]][0][self.focus[0]] > 3:
+                        self.layout[self.focus[1]][0][self.focus[0]] -= 1
+                        changed_now = True
+                    elif self.focus[0] > 0:
+                        w = sze[0]-sum(self.layout[self.focus[1]][0])
+                        if w > 3:
+                            self.layout[self.focus[1]][0][self.focus[0]-1] += 1
+                            changed_now = True
+                elif ev == 'd':
+                    if self.focus[0] < len(self.layout[self.focus[1]][0]):
+                        if sum(self.layout[self.focus[1]][0])+1<(sze[0]-3):
+                            self.layout[self.focus[1]][0][self.focus[0]] += 1
+                            changed_now = True
+                    elif self.focus[0] > 0 and self.layout[self.focus[1]][0][self.focus[0]-1] > 3:
+                            self.layout[self.focus[1]][0][self.focus[0]-1] -= 1
+                            changed_now = True
 
                 # Arrow keys switch between
                 elif ev in ('\x1b['+i for i in 'ABCD'):
@@ -292,14 +330,16 @@ class TerminalAPI:
                 sy += h
             
             hs = [i[1] for i in self.layout[:-1]]
-            hs += [sze[1]-sum(hs+[0])]
+            hs += [sze[1]-sum(hs+[0])-1]
             ws = self.layout[self.focus[1]][0].copy()
             ws += [sze[0]-sum(ws+[0])]
-            for y in range(sum(hs[:self.focus[1]]+[0]), sum(hs[:self.focus[1]+1]+[0])+1):
+            y = 0
+            mxy = sum(hs[:self.focus[1]+1]+[0])
+            for y in range(sum(hs[:self.focus[1]]+[0]), mxy+1):
                 x = sum(ws[:self.focus[0]]+[0])
                 self.Screen.Write(x, y, '\033[7m'+self.Screen.Get(x, y))
                 x = min(sum(ws[:self.focus[0]+1]+[0]), sze[0]-1)
-                self.Screen.Write(x, y, self.Screen.Get(x, y)+'\033[0m')
+                self.Screen.Write(x, y, ('+' if y == mxy else self.Screen.Get(x, y))+'\033[0m')
     
     def print(self):
         self._print_borders()

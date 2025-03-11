@@ -38,6 +38,6 @@ while True:
         API.resetScreens()
         
         API.drawAll()
-        API.printAll()#print()
+        API.print()
         sys.stdout.flush()
         force_redraw = False

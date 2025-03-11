@@ -342,9 +342,9 @@ class TerminalAPI:
                     txt = self.grid[yidx][xidx]
                     if txt is not None:
                         if w is None:
-                            w = sze[0]-sx-1
+                            w = sze[0]-sx
                         lines = txt.split('\n')
-                        midy = sy+max(h-len(lines), 0)//2
+                        midy = sy+max(h-len(lines)+1, 0)//2
                         for idx, ln in enumerate(lines[:h]):
                             self.Screen.Write(sx+max(w-len(ln), 0)//2, midy+idx, ln[:w])
                     if w is not None:

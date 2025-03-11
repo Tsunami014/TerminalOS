@@ -1,4 +1,4 @@
-from API import PositionedWidget, Clipboard, strLen, split
+from lib.API import PositionedWidget, Clipboard, strLen, split
 from string import printable
 import time
 

@@ -1,7 +1,8 @@
+from enum import Enum
 import sys
-import os
 import re
 import time
+import shutil
 
 __all__ = [
     'TerminalAPI',
@@ -9,8 +10,6 @@ __all__ = [
     'Position',
         'StaticPos',
         'RelativePos',
-    'BarElm',
-        'ClickBarElm',
     'Container',
         'Window',
             'FullscreenWindow',
@@ -97,87 +96,104 @@ class Screen:
         return ' '
 
 class Clipboard:
-    @staticmethod
-    def writeSelection(data):
-        os.system(f'echo "{data.replace("\"", "\\\"")}" | xsel -p --display :0')
+    CLIP = []
+    MAX_LEN = 25
     
-    @staticmethod
-    def readSelection():
-        return os.popen('xsel -p --display :0').read()
+    @classmethod
+    def write(cls, data):
+        cls.CLIP.append(data)
+        if len(cls.CLIP) > cls.MAX_LEN:
+            cls.CLIP = cls.CLIP[len(cls.CLIP)-cls.MAX_LEN:]
     
-    @staticmethod
-    def write(data):
-        os.system(f'echo "{data.replace("\"", "\\\"")}" | xsel -b --display :0')
-    
-    @staticmethod
-    def read():
-        return os.popen('xsel -b --display :0').read()
+    @classmethod
+    def read(cls):
+        return cls.CLIP[-1]
+
+class ScreenModes(Enum):
+    APPS = 0
+    """The app view"""
+    CHOOSE = 1
+    """The choose an app view"""
+    LAYOUT = 2
+    """The layout editor view"""
 
 class TerminalAPI:
+    _instance = None
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(self):
         self.events = []
-        self.elms = []
         self.fullscreen = None
-        self._RawMouse = [0, 0]
-        self._MouseStatus = 0
-        self._MouseSensitivity = [0.1, 0.05]
+        self.windows = []
+        self.layout = [([10], 10)]
+        self.mode = ScreenModes.LAYOUT
         self.Screen = Screen()
         self._oldScreen = Screen()
-        self.barElms = []
-        self._prevMouse = [False, False, False]
-    
-    @property
-    def Mouse(self):
-        return (round(self._RawMouse[0]), round(self._RawMouse[1]))
-    
-    @property
-    def LMB(self):
-        return bool(self._MouseStatus & 0x01)
-    @property
-    def MMB(self):
-        return bool(self._MouseStatus & 4)
-    @property
-    def RMB(self):
-        return bool(self._MouseStatus & 2)
-
-    @property
-    def LMBP(self):
-        return self.LMB and not self._prevMouse[0]
-    @property
-    def MMBP(self):
-        return self.MMB and not self._prevMouse[1]
-    @property
-    def RMBP(self):
-        return self.RMB and not self._prevMouse[2]
     
     def updateAll(self):
-        if self.fullscreen is not None:
+        if self.mode == ScreenModes.APPS:
+            if self.fullscreen is not None:
+                redraw = self.fullscreen.update()
+                for elm in self.windows:
+                    if elm.DRAW_WHILE_FULL:
+                        if elm.update():
+                            redraw = True
+                return redraw
             redraw = False
-            for elm in self.elms:
-                if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
-                    if elm.update():
-                        redraw = True
+            for elm in self.windows:
+                if elm.update():
+                    redraw = True
             return redraw
-        redraw = False
-        for elm in self.elms:
-            if elm.update():
-                redraw = True
-        return redraw
+        elif self.mode == ScreenModes.LAYOUT:
+            return False
+        return False
 
     def resetScreens(self):
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
         self.Screen.Clear()
     
     def drawAll(self):
-        if self.fullscreen is not None:
-            for elm in self.elms:
-                if elm is self.fullscreen or elm.DRAW_WHILE_FULL:
+        if self.mode == ScreenModes.APPS:
+            if self.fullscreen is not None:
+                self.fullscreen.draw()
+                for elm in self.windows:
+                    if elm.DRAW_WHILE_FULL:
+                        elm.draw()
+            else:
+                for elm in self.windows:
                     elm.draw()
-        else:
-            for elm in self.elms:
-                elm.draw()
+        elif self.mode == ScreenModes.LAYOUT:
+            return
+        return
+    
+    def _print_borders(self):
+        sze = self.get_terminal_size()
+        self.Screen.Write(0, 0, '┌', '─' * (sze[0]-2), '┐')
+        for row in range(1, sze[1]-1):
+            self.Screen.Write(0, row, '│')
+            self.Screen.Write(sze[0]-1, row, '│')
+        self.Screen.Write(0, sze[1]-1, '└', '─' * (sze[0]-2), '┘')
+        if self.mode == ScreenModes.LAYOUT:
+            sy = 0
+            for row, h in self.layout:
+                self.Screen.Write(0, sy+h, '├')
+                self.Screen.Write(sze[0]-1, sy+h, '┤')
+                for ix in range(1, sze[0]-1):
+                    self.Screen.Write(ix, sy+h, '─')
+                sx = 0
+                for x in row:
+                    sx += x
+                    self.Screen.Write(sx, sy, '┬')
+                    self.Screen.Write(sx, sy+h, '┴')
+                    for iy in range(1+sy, sy+h):
+                        self.Screen.Write(sx, iy, '│')
+                sy += h
     
     def print(self):
+        self._print_borders()
         winSize = self.get_terminal_size()
         for y, oldrow in self._oldScreen.screen.items():
             if y < 0 or y > winSize[1]-1:
@@ -197,6 +213,7 @@ class TerminalAPI:
                 sys.stdout.write(f'\033[{y+1};1H'+new[:winSize[0]+ANSILen(new)])
     
     def printAll(self):
+        self._print_borders()
         winSize = self.get_terminal_size()
         for y in range(winSize[1]):
             if y in self.Screen.screen:
@@ -206,14 +223,10 @@ class TerminalAPI:
             
             sys.stdout.write(f'\033[{y+1};1H\033[K'+new[:winSize[0]+ANSILen(new)])
     
-    @property
-    def moveToMouse(self):
-        return f'\033[{round(self.Mouse[1])};{round(self.Mouse[0])}H'
-    
     @staticmethod
     def get_terminal_size():
-        rows, cols = os.popen('stty size', 'r').read().split()
-        return int(cols), int(rows)
+        sze = shutil.get_terminal_size()
+        return sze.columns, sze.lines
 
 class Position:
     def __call__(self, size, winSzefun, parentFull):
@@ -227,104 +240,23 @@ class StaticPos(Position):
         return (self.x, self.y)
 
 class RelativePos(Position):
-    """
-    Gets a weighted position if the parent is fullscreen, otherwise uses the fallback.
-
-    -1 for weight means use fallback.
-    """
-    def __init__(self, weight_x, weight_y, fallback_x, fallback_y):
+    def __init__(self, weight_x, weight_y, force_x=None, force_y=None):
         self.weight = (weight_x, weight_y)
-        self.fallback = (fallback_x, fallback_y)
+        self.force = (force_x, force_y)
     
-    def __call__(self, size, winSzefun, parentFull):
-        if parentFull:
-            winSze = winSzefun()
-            if self.weight[0] == -1:
-                x = self.fallback[0]
+    def __call__(self, size, winSze, parentFull):
+        out = []
+        for i in range(2):
+            if self.force[i] is not None:
+                out.append(self.force[i])
             else:
-                x = round((winSze[0]-size[0]-2)*self.weight[0])
-            if self.weight[1] == -1:
-                y = self.fallback[1]
-            else:
-                y = round((winSze[1]-size[1])*self.weight[1])
-            return (x, y)
-        return self.fallback
-
-class BarElm:
-    API: TerminalAPI # Uses Container's API
-    BarNum: int
-    """
-    The bar number to attach to.
-
-    ```
-     111 222 
-    3       4
-    3       4
-
-    5       6
-    5       6
-     777 888 
-    ```
-    """
-    def __new__(cls, *args, **kwargs):
-        elm = super().__new__(cls)
-        elm.API = Container.API
-        elm.API.barElms.append(elm)
-        return elm
-    
-    def __del__(self):
-        if self in self.API.barElms:
-            self.API.barElms.remove(self)
-    
-    def _draw(self) -> str:
-        """
-        Return a string of what to render in the bar.
-        """
-        return ''
-
-    def draw(self, x_off: int, y_off: int):
-        """Do not override this func in subclasses unless needed to, instead use `_draw`"""
-        txt = self._draw()
-        if 3 <= self.BarNum <= 6:
-            if self.BarNum < 5:
-                self._Write(x_off, y_off, txt)
-            else:
-                self._Write(x_off, y_off-len(txt), txt)
-        else:
-            if self.BarNum in (1, 7):
-                self._Write(x_off, y_off, txt)
-            else:
-                self._Write(x_off-len(txt), y_off, txt)
-        return len(txt)
-
-    @property
-    def _Screen(self) -> Screen:
-        return self.API.Screen
-
-    def _Write(self, x, y, *args):
-        """Writes "".join(args) at (x, y)"""
-        self._Screen.Write(x, y, *args)
-
-class ClickBarElm(BarElm):
-    def draw(self, x_off: int, y_off: int):
-        """Do not override this func in subclasses unless needed to, instead use `_draw`"""
-        sze = super().draw(x_off, y_off)
-        mouse = self.API.Mouse
-        if self.API.LMBP:
-            if self.BarNum in (1, 2, 7, 8):
-                if 0 <= mouse[0] - x_off < sze and mouse[1] == y_off:
-                    self.callback()
-            else:
-                if 0 <= mouse[1] - y_off < sze and mouse[0] == x_off:
-                    self.callback()
-        return sze
-    
-    def callback(self):
-        pass
+                out.append(round((winSze[i]-size[i]-2)*self.weight[i]))
+        return out
 
 class Container:
-    API: TerminalAPI # API class variable will be set here, going down to all Element subclasses to use!
     DRAW_WHILE_FULL = False
+    
+    API = TerminalAPI()
 
     def __new__(cls, *args, **kwargs):
         elm = super().__new__(cls)
@@ -501,37 +433,6 @@ class Window(Container):
         for wid in self.widgets:
             if wid.update():
                 ret = True
-        if self.API.LMB:
-            if self._grabbed is None:
-                if self.API.LMBP:
-                    mpos = self.API.Mouse
-                    if mpos[1] == self.y and self.x <= mpos[0] < (self.x+self.width):
-                        self._moved = False
-                        self._grabbed = mpos
-            else:
-                mpos = self.API.Mouse
-                if self._grabbed != mpos:
-                    self._moved = True
-                    if self.isFullscreen:
-                        self.unfullscreen()
-                    diff = [self._grabbed[0]-mpos[0], self._grabbed[1]-mpos[1]]
-                    self.x -= diff[0]
-                    self.y -= diff[1]
-                    self._grabbed = mpos
-                    return True
-        else:
-            if not (self._moved or self._grabbed is None):
-                if self._grabbed == (self.x+self.width-1, self.y):
-                    self.__del__()
-                    return True
-                elif self._grabbed == (self.x+self.width-2, self.y):
-                    if self.isFullscreen:
-                        self.unfullscreen()
-                    else:
-                        self.fullscreen()
-                    return True
-            self._grabbed = None
-        
         return ret
 
     def __str__(self):
@@ -583,20 +484,6 @@ class ResizableWindow(Window):
         return self.size[1]
 
     def update(self):
-        if not self.isFullscreen:
-            if self.API.LMB:
-                if self.API.LMBP:
-                    mp = self.API.Mouse
-                    if mp[0] == self.x+self.size[0]-1 and mp[1] == self.y+self.size[1]-1:
-                        self._grabbingSize = mp
-                elif self._grabbingSize is not None:
-                    mp = self.API.Mouse
-                    if mp != self._grabbingSize:
-                        self._grabbingSize = mp
-                        self.size = (max(mp[0]-self.x+1, 3), max(mp[1]-self.y+1, 2))
-                        return True
-            else:
-                self._grabbingSize = None
         return super().update()
 
 class FullscreenWindow(Window):

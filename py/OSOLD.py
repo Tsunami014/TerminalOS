@@ -2,9 +2,9 @@
 import sys
 import termios
 import tty
-from IO import Pollable, Readable
-from API import TerminalAPI, Container
-import core
+from lib.IO import Pollable, Readable
+from lib.API import TerminalAPI, Container
+import lib.core as core
 
 API = TerminalAPI()
 Container.API = API

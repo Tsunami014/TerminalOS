@@ -1,11 +1,10 @@
 from difflib import get_close_matches
-from API import App, FullscreenApp, Popup, StaticPos, RelativePos
-import widgets as wids
+from lib.API import App, FullscreenApp, Popup, StaticPos, RelativePos
+import lib.widgets as wids
 import os
 import importlib
 import requests
 import re
-import bar
 
 __all__ = [
     'Help',
@@ -13,15 +12,6 @@ __all__ = [
 ]
 
 PATH = os.path.abspath(os.path.join(os.getcwd(), __file__, '../', 'external'))
-
-def resetApps(API):
-    API.barElms = []
-
-    for c in __all__:
-        bar.BarApp(globals()[c])
-    bar.BarCmd(8, "timedatectl | grep -P -o '(?<=Local time: )[a-zA-Z]+?[ \\-0-9:]+'")
-
-    loadExternals()
 
 def loadExternals():
     if not os.path.exists(PATH):

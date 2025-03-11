@@ -1,2 +1,4 @@
 *.pyc
-external/
+
+rootfs/*
+Python-3.12.0/*

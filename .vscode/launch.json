@@ -8,13 +8,22 @@
             "name": "Python OS.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "py/OS.py"
+            "program": "py/OS.py",
+            
+            "console": "externalTerminal"
         },
         {
             "name": "Simulate boot",
             "type": "node-terminal",
             "request": "launch",
             "command": "rm -rf rootfs/py;cp py rootfs/py -r;(cd rootfs && find . | cpio -o -H newc) | gzip > initrd-tos.img;sudo mv initrd-tos.img /boot/;sudo qemu-system-x86_64 -kernel /boot/vmlinuz -initrd /boot/initrd-tos.img -m 3G -nographic -append 'root=/dev/ram0 rdinit=/init console=ttyS0'",
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "externalTerminal"
         }
     ]
 }

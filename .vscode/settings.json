@@ -1,0 +1,6 @@
+{
+    "python.defaultInterpreterPath": "rootfs/pycore/bin/python3.12",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportShadowedImports": "none"
+    }
+}

@@ -39,7 +39,13 @@ cp /bin/busybox rootfs/bin/sh
 ```
 3. Get libraries required
 ```bash
+# Python libraries
+rootfs/pycore/bin/pip3.12 install evdev
+
 mkdir -p rootfs/lib rootfs/lib64
+
+sudo apt install libffi8
+sudo cp /usr/lib/x86_64-linux-gnu/libffi.so.8 rootfs/lib/x86_64-linux-gnu/libffi.so.8
 
 for file in rootfs/pycore/bin/python3.12; do
     ldd "$file" | grep -P -o "/[^ \n]+" | while read lib; do
@@ -104,13 +110,19 @@ make altinstall
 
 cd ../
 
+# Get python libraries required
+rootfs/pycore/bin/pip3.12 install evdev
+
 # Get apps
 mkdir -p rootfs/bin
 sudo apt install busybox-static
 cp /bin/busybox rootfs/bin/sh
 
-# Get libraries required
+# Get binary libraries required
 mkdir -p rootfs/lib rootfs/lib64
+
+sudo apt install libffi8
+sudo cp /usr/lib/x86_64-linux-gnu/libffi.so.8 rootfs/lib/x86_64-linux-gnu/libffi.so.8
 
 for file in rootfs/pycore/bin/python3.12; do
     ldd "$file" | grep -P -o "/[^ \n]+" | while read lib; do

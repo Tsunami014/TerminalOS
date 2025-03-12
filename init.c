@@ -10,6 +10,8 @@
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <dirent.h>
+#include <string.h>
 
 // Function to reset terminal settings
 void reset_terminal_settings() {
@@ -24,18 +26,36 @@ void reset_terminal_settings() {
     }
 }
 
+// Function to create /dev/input/event* device files
+void create_input_devices() {
+    mkdir("/dev/input", 0755);
+    DIR *dir = opendir("/sys/class/input");
+    if (!dir) {
+        perror("Failed to open /sys/class/input");
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, "event", 5) == 0) {  // Look for "event*"
+            char dev_path[256];
+            snprintf(dev_path, sizeof(dev_path), "/dev/input/%s", entry->d_name);
+            mknod(dev_path, S_IFCHR | 0666, makedev(13, atoi(entry->d_name + 5)));
+        }
+    }
+    closedir(dir);
+}
+
 int main(void) {
     printf("\033[2J\033[H");
     // Create necessary directories
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);
     mkdir("/dev", 0755);
-    mkdir("/dev/input", 0755);
-
+    
     // Mount necessary file systems
     if (mount("devtmpfs", "/dev", "devtmpfs", 0, NULL) < 0) {
         perror("Failed to mount /dev");
-        while (1); // Halt
+        while (1);
     }
     if (mount("proc", "/proc", "proc", 0, NULL) < 0) {
         perror("Failed to mount /proc");
@@ -45,7 +65,10 @@ int main(void) {
         perror("Failed to mount /sys");
         while (1);
     }
-
+    
+    // Create /dev/input/event* files automatically
+    create_input_devices();
+    
     // Open the console device file
     int console_fd = open("/dev/console", O_RDWR);
     if (console_fd >= 0) {
@@ -58,8 +81,8 @@ int main(void) {
         perror("Failed to open /dev/console");
         while (1);
     }
-
-    // Fork the process to have Python not take over the un-interruptable process (because Python can exit at any time)
+    
+    // Fork the process to have Python not take over the un-interruptable process
     pid_t pid = fork();
     if (pid < 0) {
         perror("Failed to fork for /start");
@@ -68,7 +91,7 @@ int main(void) {
         // Child process: execute the /start script.
         execl("/start", "/start", (char *)NULL);
         perror("Failed to execute /start");
-        exit(1);  // Exit with failure if exec fails.
+        exit(1);
     } else {
         // Parent process: wait for the child to complete.
         int status;
@@ -77,8 +100,7 @@ int main(void) {
 
         reset_terminal_settings();
         
-        // Reopen /dev/console to ensure a valid terminal,
-        // especially if the child process may have affected it.
+        // Reopen /dev/console to ensure a valid terminal
         int fd = open("/dev/console", O_RDWR);
         if (fd >= 0) {
             ioctl(fd, TIOCSCTTY, 1);

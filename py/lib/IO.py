@@ -11,28 +11,60 @@ def find_keyboard():
             return device
     raise Exception("No keyboard device found. Try running as root.")
 
-def scancode_to_unicode(scancode):
-    try:
-        key_name = ecodes.KEY[scancode]
-        if key_name.startswith("KEY_"):
-            return key_name[4:]
-        return key_name
-    except KeyError:
-        return f"[{scancode}]"
+KEY_MAPPING = {
+    'SPACE':    (' ', ' '),
+    'RIGHTBRACE': (']', '}'),
+    'LEFTBRACE':  ('[', '{'),
+    'SEMICOLON':  (';', ':'),
+    'APOSTROPHE': ("'", '"'),
+    'COMMA':      (',', '<'),
+    'DOT':        ('.', '>'),
+    'SLASH':      ('/', '?'),
+    'BACKSLASH':  ('\\', '|'),
+    'GRAVE':      ('`', '~'),
+    'MINUS':      ('-', '_'),
+    'EQUAL':      ('=', '+'),
+    # Number keys and their shifted symbols.
+    '1':          ('1', '!'),
+    '2':          ('2', '@'),
+    '3':          ('3', '#'),
+    '4':          ('4', '$'),
+    '5':          ('5', '%'),
+    '6':          ('6', '^'),
+    '7':          ('7', '&'),
+    '8':          ('8', '*'),
+    '9':          ('9', '('),
+    '0':          ('0', ')'),
+}
 
 class Key:
     def __init__(self, code, state, modifs):
         self.scancode = code
         self.state = state
-        self.unicode = scancode_to_unicode(code)
+        try:
+            key_name = ecodes.KEY[code]
+            if key_name.startswith("KEY_"):
+                self.keyName = key_name[4:]
+            else:
+                self.keyName = key_name
+        except KeyError:
+            self.keyName = f"[{code}]"
         self.heldFor = 0
         self.shift = modifs['shift']
         self.ctrl = modifs['ctrl']
         self.alt = modifs['alt']
         self.super = modifs['super']
+
+        if len(self.keyName) == 1 and self.keyName.isalpha():
+            self.unicode = self.keyName.upper() if self.shift else self.keyName.lower()
+        elif self.keyName in KEY_MAPPING:
+            unshifted, shifted = KEY_MAPPING[self.keyName]
+            self.unicode = shifted if self.shift else unshifted
+        else:
+            self.unicode = None
     
     def __str__(self):
-        infset = self.unicode
+        infset = self.keyName
         if self.super:
             infset = 'super+'+infset
         if self.ctrl:
@@ -48,7 +80,7 @@ class Key:
     def __eq__(self, other):
         if isinstance(other, Key):
             return all(getattr(self, i) == getattr(other, i) for i in ('scancode', 'state', 'shift', 'ctrl', 'alt', 'super'))
-        infset = set((self.unicode,))
+        infset = set((self.keyName,))
         if self.shift:
             infset.add('shift')
         if self.ctrl:

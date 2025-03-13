@@ -113,10 +113,10 @@ class Clipboard:
 class ScreenModes(Enum):
     APPS = 0
     """The app view"""
-    CHOOSE = 1
-    """The choose an app view"""
-    LAYOUT = 2
+    LAYOUT = 1
     """The layout editor view"""
+    CHOOSE = 2
+    """The choose an app view"""
 
 class TerminalAPI:
     _instance = None
@@ -132,6 +132,8 @@ class TerminalAPI:
         self.focus = [0, 0]
         self.layout = [[[], None]]
         self.grid = [[None]]
+        self.selected = None
+        self.searching = ''
         self.mode = ScreenModes.LAYOUT
         self.Screen = Screen()
         self._oldScreen = Screen()
@@ -251,6 +253,22 @@ class TerminalAPI:
                     elif ev == 'RIGHT':
                         self.focus[0] += 1
                         changed_now = True
+                    
+                    elif ev == 'SPACE' or (ev == 'ENTER' and self.selected is not None):
+                        if self.selected is not None:
+                            self.grid[self.focus[1]][self.focus[0]] = self.selected
+                            self.selected = None
+                        else:
+                            self.selected = self.grid[self.focus[1]][self.focus[0]]
+                            self.grid[self.focus[1]][self.focus[0]] = None
+                        changed = True
+                    elif ev in ('BACKSPACE', 'DELETE'):
+                        self.grid[self.focus[1]][self.focus[0]] = None
+                        changed = True
+                    elif ev == 'ENTER':
+                        self.mode = ScreenModes.CHOOSE
+                        self.searching = ''
+                        changed = True
                 
                 # Just letters resize
                 elif ev == 'W' and ev.heldFor % 2 == 0:
@@ -302,6 +320,17 @@ class TerminalAPI:
                 
                 changed = changed or changed_now
             return changed
+        elif self.mode == ScreenModes.CHOOSE:
+            changed = False
+            for ev in self.events:
+                if ev.state == 1:
+                    if ev == 'ESC':
+                        self.mode = ScreenModes.LAYOUT
+                        changed = True
+                    elif ev.unicode is not None:
+                        self.searching += ev.unicode
+                        changed = True
+            return changed
         return False
 
     def resetScreens(self):
@@ -318,9 +347,13 @@ class TerminalAPI:
             else:
                 for elm in self.windows:
                     elm.draw()
-        elif self.mode == ScreenModes.LAYOUT:
-            return
-        return
+        elif self.mode == ScreenModes.CHOOSE:
+            sze = self.get_terminal_size()
+            txt = self.searching
+            lines = txt.split('\n')
+            midy = (sze[1]-len(lines)+1)//2
+            for idx, ln in enumerate(lines):
+                self.Screen.Write((sze[0]-len(ln))//2, midy+idx, ln)
     
     def _print_borders(self):
         sze = self.get_terminal_size()
@@ -329,6 +362,8 @@ class TerminalAPI:
             self.Screen.Write(0, row, '│')
             self.Screen.Write(sze[0]-1, row, '│')
         self.Screen.Write(0, sze[1]-1, '└', '─' * (sze[0]-2), '┘')
+        if self.mode == ScreenModes.CHOOSE:
+            return
         sy = 0
         for yidx, (row, h) in enumerate(self.layout):
             if h is None:
@@ -342,13 +377,17 @@ class TerminalAPI:
             for xidx, w in enumerate(row+[None]):
                 if self.mode == ScreenModes.LAYOUT:
                     txt = self.grid[yidx][xidx]
+                    thisSel = False
+                    if self.selected is not None and self.focus[0] == xidx and self.focus[1] == yidx:
+                        thisSel = True
+                        txt = self.selected
                     if txt is not None:
                         if w is None:
                             w = sze[0]-sx
                         lines = txt.split('\n')
-                        midy = sy+max(h-len(lines)+1, 0)//2
+                        midy = sy+max(h-len(lines)+1-int(thisSel)*2, 0)//2
                         for idx, ln in enumerate(lines[:h]):
-                            self.Screen.Write(sx+max(w-len(ln), 0)//2, midy+idx, ln[:w])
+                            self.Screen.Write(sx+max(w-len(ln)-int(thisSel)*2, 0)//2, midy+idx, ln[:w])
                 if w is not None:
                     sx += w
                     chr = self.Screen.Get(sx, sy)
@@ -368,11 +407,16 @@ class TerminalAPI:
             ws += [sze[0]-sum(ws+[0])]
             y = 0
             mxy = sum(hs[:self.focus[1]+1]+[0])
+            extra = '27;103;30' if (self.selected is not None) else '7'
             for y in range(sum(hs[:self.focus[1]]+[0]), mxy+1):
-                x = sum(ws[:self.focus[0]]+[0])
-                self.Screen.Write(x, y, '\033[7m'+self.Screen.Get(x, y))
-                x = min(sum(ws[:self.focus[0]+1]+[0]), sze[0]-1)
-                self.Screen.Write(x, y, ('+' if y == mxy else self.Screen.Get(x, y))+'\033[0m')
+                x1 = sum(ws[:self.focus[0]]+[0])
+                x2 = min(sum(ws[:self.focus[0]+1]+[0]), sze[0]-1)
+                if y == mxy:
+                    self.Screen.Write(x1, y, f'\033[{extra}m', self.Screen.Get(x1, y))
+                    self.Screen.Write(x2, y, '+\033[0m')
+                else:
+                    self.Screen.Write(x1, y, '\033[7m', self.Screen.Get(x1, y))
+                    self.Screen.Write(x2, y, f'\033[{extra}m{self.Screen.Get(x2, y)}\033[0m')
     
     def print(self):
         self._print_borders()

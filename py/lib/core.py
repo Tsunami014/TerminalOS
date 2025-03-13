@@ -67,13 +67,11 @@ class SoftwareManager(FullscreenApp):
     def install(self, name, fc):
         with open(f'{PATH}/{name}.py', 'w+') as f:
             f.write(fc)
-        resetApps(self.Win.API)
         Popup(wids.Text(StaticPos(0, 0), 'Installed!'))
         self._info(name, fc)
     
     def remove(self, name, fc):
         os.remove(f'{PATH}/{name}.py')
-        resetApps(self.Win.API)
         Popup(wids.Text(StaticPos(0, 0), 'Removed!'))
         self._info(name, fc)
     

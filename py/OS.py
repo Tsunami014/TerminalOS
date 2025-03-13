@@ -15,15 +15,11 @@ fd = sys.stdin.fileno()
 old_settings = termios.tcgetattr(fd)
 tty.setraw(fd)
 sys.stdout.write('\033[2J\033[H')
-force_redraw = True
 while True:
     API.events = inp.handleQueue()
-    # print(''.join(repr(i)+'\n' for i in API.events), end='')
     
-    if API.updateAll() or force_redraw:
-        API.resetScreens()
-        
-        API.drawAll()
-        API.print()
-        sys.stdout.flush()
-        force_redraw = False
+    API.updateAll()
+    API.resetScreens()
+    API.drawAll()
+    API.print()
+    sys.stdout.flush()

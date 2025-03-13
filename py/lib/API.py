@@ -141,20 +141,15 @@ class TerminalAPI:
     def updateAll(self):
         if self.mode == ScreenModes.APPS:
             if self.fullscreen is not None:
-                redraw = self.fullscreen.update()
+                self.fullscreen.update()
                 for elm in self.windows:
                     if elm.DRAW_WHILE_FULL:
-                        if elm.update():
-                            redraw = True
-                return redraw
-            redraw = False
+                        elm.update()
+                return 
             for elm in self.windows:
-                if elm.update():
-                    redraw = True
-            return redraw
+                elm.update()
         elif self.mode == ScreenModes.LAYOUT:
             sze = self.get_terminal_size()
-            changed = False
             for ev in self.events:
                 changed_now = False
                 if ev.state == 1:
@@ -261,17 +256,14 @@ class TerminalAPI:
                         else:
                             self.selected = self.grid[self.focus[1]][self.focus[0]]
                             self.grid[self.focus[1]][self.focus[0]] = None
-                        changed = True
                     elif ev in ('BACKSPACE', 'DELETE'):
                         self.grid[self.focus[1]][self.focus[0]] = None
-                        changed = True
                     elif ev == 'ENTER':
                         self.mode = ScreenModes.CHOOSE
                         self.searching = ''
-                        changed = True
                 
                 # Just letters resize
-                elif ev == 'W' and ev.heldFor % 2 == 0:
+                elif ev == 'W' and ev.heldFrames % 2 == 0:
                     if self.focus[1] < len(self.layout)-1:
                         if self.layout[self.focus[1]][1] > 3:
                             self.layout[self.focus[1]][1] -= 1
@@ -281,7 +273,7 @@ class TerminalAPI:
                         if h > 3:
                             self.layout[self.focus[1]-1][1] += 1
                         changed_now = True
-                elif ev == 'S' and ev.heldFor % 2 == 0:
+                elif ev == 'S' and ev.heldFrames % 2 == 0:
                     if self.focus[1] < len(self.layout)-1:
                         if sum(i[1] for i in self.layout if i[1])+1<(sze[1]-3):
                             self.layout[self.focus[1]][1] += 1
@@ -317,21 +309,15 @@ class TerminalAPI:
                         self.focus[0] = 0
                     elif self.focus[0] > len(self.layout[self.focus[1]][0]):
                         self.focus[0] = len(self.layout[self.focus[1]][0])
-                
-                changed = changed or changed_now
-            return changed
         elif self.mode == ScreenModes.CHOOSE:
-            changed = False
             for ev in self.events:
-                if ev.state == 1:
-                    if ev == 'ESC':
-                        self.mode = ScreenModes.LAYOUT
-                        changed = True
+                if ev == 'ESC' and ev.state == 1:
+                    self.mode = ScreenModes.LAYOUT
+                if ev.state == 1 or (ev.heldFor > 1 and ev.heldFrames % 3 == 0):
+                    if ev == 'BACKSPACE':
+                        self.searching = self.searching[:-1]
                     elif ev.unicode is not None:
                         self.searching += ev.unicode
-                        changed = True
-            return changed
-        return False
 
     def resetScreens(self):
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
@@ -349,11 +335,20 @@ class TerminalAPI:
                     elm.draw()
         elif self.mode == ScreenModes.CHOOSE:
             sze = self.get_terminal_size()
-            txt = self.searching
-            lines = txt.split('\n')
+            MAX_LEN = round(sze[0]/5)
+            MAX_LINES = round(sze[1]/5)
+            sze = self.get_terminal_size()
+            self.searching = self.searching[:MAX_LEN*MAX_LINES]
+            FILLER = '⓿'
+            txt = self.searching+FILLER
+            lines = ['_'*MAX_LEN for _ in range(MAX_LINES)]
+            for ln in range(min(math.ceil(len(txt)/MAX_LEN), MAX_LINES)):
+                lnt = txt[ln*MAX_LEN:(ln+1)*MAX_LEN]
+                tlen = (MAX_LEN-len(lnt))//2
+                lines[ln] = ('_'*tlen+lnt+'_'*tlen+'_')[:MAX_LEN]
             midy = (sze[1]-len(lines)+1)//2
             for idx, ln in enumerate(lines):
-                self.Screen.Write((sze[0]-len(ln))//2, midy+idx, ln)
+                self.Screen.Write((sze[0]-len(ln))//2, midy+idx, ln.replace(FILLER, ['\033[7m_\033[27m', ' '][math.floor(time.time()%1.5)]))
     
     def _print_borders(self):
         sze = self.get_terminal_size()

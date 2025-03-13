@@ -1,5 +1,6 @@
 from evdev import InputDevice, list_devices, categorize, ecodes
 from queue import Empty
+import time
 from multiprocessing import Process, Pipe
 
 __all__ = ['Key', 'KbdInp']
@@ -49,7 +50,8 @@ class Key:
                 self.keyName = key_name
         except KeyError:
             self.keyName = f"[{code}]"
-        self.heldFor = 0
+        self.startHoldTime = time.time()
+        self.heldFrames = 0
         self.shift = modifs['shift']
         self.ctrl = modifs['ctrl']
         self.alt = modifs['alt']
@@ -62,6 +64,10 @@ class Key:
             self.unicode = shifted if self.shift else unshifted
         else:
             self.unicode = None
+    
+    @property
+    def heldFor(self):
+        return time.time() - self.startHoldTime
     
     def __str__(self):
         infset = self.keyName
@@ -146,7 +152,8 @@ class KbdInp:
             while self.pipe.poll():
                 nev = self.pipe.recv()
                 if nev.scancode in self.events and nev == self.events[nev.scancode]:
-                    nev.heldFor = self.events[nev.scancode].heldFor + 1
+                    nev.startHoldTime = self.events[nev.scancode].startHoldTime
+                    nev.heldFrames = self.events[nev.scancode].heldFrames + 1
                 self.events[nev.scancode] = nev
         except Empty:
             pass

@@ -313,7 +313,7 @@ class TerminalAPI:
             for ev in self.events:
                 if ev == 'ESC' and ev.state == 1:
                     self.mode = ScreenModes.LAYOUT
-                if ev.state == 1 or (ev.heldFor > 1 and ev.heldFrames % 3 == 0):
+                if ev.state == 1 or (ev.heldFor > 0.8 and ev.heldFrames % 4 == 0):
                     if ev == 'BACKSPACE':
                         self.searching = self.searching[:-1]
                     elif ev.unicode is not None:
@@ -338,6 +338,33 @@ class TerminalAPI:
             MAX_LEN = round(sze[0]/5)
             MAX_LINES = round(sze[1]/5)
             sze = self.get_terminal_size()
+
+            baselen = round(sze[0]/20)
+            lens = {
+                '|': baselen,
+                '/': round(baselen*0.7),
+                '\\': round(baselen*0.7),
+                '-': baselen*2,
+            }
+            for chr, weight, dir, txt in [
+                ('|', (0.5, 0), (0, -1), 'This is\nthe top'),
+                ('/', (1, 0), (1, -1), 'This is\nthe topright'),
+                ('-', (1, 0.5), (1, 0), 'This is\nthe right'),
+                ('\\',(1, 1), (1, 1), 'This is the\nbottomright'),
+                ('|', (0.5, 1), (0, 1), 'This is the\nbottom'),
+                ('/', (0, 1), (-1, 1), 'This is the\nbottomleft'),
+                ('-', (0, 0.5), (-1, 0), 'This is\nthe left'),
+                ('\\',(0, 0), (-1, -1), 'This is the\ntopleft')
+            ]:
+                for idx in range(lens[chr]):
+                    self.Screen.Write(int((sze[0]-MAX_LEN)/2-1+(MAX_LEN+1)*weight[0]+dir[0]*idx), int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*idx), chr)
+                lines = txt.split('\n')
+                ml = max(len(i) for i in lines)
+                sx = int((sze[0]-MAX_LEN  )/2-1+(MAX_LEN+1  )*weight[0]+dir[0]*lens[chr]+ml        *(weight[0]-1))
+                sy = int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*lens[chr]+len(lines)*(weight[1]-1))
+                for idx, ln in enumerate(lines):
+                    self.Screen.Write(sx+(ml-len(ln))//2, sy+idx, ln)
+
             self.searching = self.searching[:MAX_LEN*MAX_LINES]
             FILLER = '⓿'
             txt = self.searching+FILLER

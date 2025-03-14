@@ -2,6 +2,7 @@ from enum import Enum
 import math
 import re
 import sys
+from threading import Thread
 import time
 import shutil
 
@@ -131,9 +132,12 @@ class TerminalAPI:
         self.windows = []
         self.focus = [0, 0]
         self.layout = [[[], None]]
+        self.chooseHold = None
         self.grid = [[None]]
         self.selected = None
         self.searching = ''
+        self.searchTxts = {}
+        self.searchPro = None
         self.mode = ScreenModes.LAYOUT
         self.Screen = Screen()
         self._oldScreen = Screen()
@@ -227,13 +231,6 @@ class TerminalAPI:
                             ew = self.layout[self.focus[1]][0].pop(self.focus[0]+1)
                             self.layout[self.focus[1]][0][self.focus[0]] += ew
                         changed_now = True
-                    
-                    elif ev == 'H': # Testing
-                        self.grid[self.focus[1]][self.focus[0]] = 'HELLO\nworld'
-                        changed_now = True
-                    elif ev == 'B': # Testing
-                        self.grid[self.focus[1]][self.focus[0]] = 'BYE\nbyeeee'
-                        changed_now = True
 
                     # Arrow keys switch between
                     elif ev == 'UP':
@@ -261,6 +258,7 @@ class TerminalAPI:
                     elif ev == 'ENTER':
                         self.mode = ScreenModes.CHOOSE
                         self.searching = ''
+                        self._search()
                 
                 # Just letters resize
                 elif ev == 'W' and ev.heldFrames % 2 == 0:
@@ -310,14 +308,53 @@ class TerminalAPI:
                     elif self.focus[0] > len(self.layout[self.focus[1]][0]):
                         self.focus[0] = len(self.layout[self.focus[1]][0])
         elif self.mode == ScreenModes.CHOOSE:
+            self.chooseHold = None
+            MAP = {
+                'u': 'ctrl+UP', 'd': 'ctrl+DOWN', 'l': 'ctrl+LEFT', 'r': 'ctrl+RIGHT'
+            }
+            heldevs = [i for i in self.events if i.state == 2]
+            for idx, evs in enumerate([
+                'ul', 'ur', 'dr', 'dl', 'u', 'r', 'd', 'l'
+            ]):
+                if all(MAP[i] in heldevs for i in evs):
+                    self.chooseHold = idx
+                    break
+            change = False
             for ev in self.events:
                 if ev == 'ESC' and ev.state == 1:
                     self.mode = ScreenModes.LAYOUT
-                if ev.state == 1 or (ev.heldFor > 0.8 and ev.heldFrames % 4 == 0):
+                elif ev in ('ctrl+LEFTSHIFT', 'ctrl+RIGHTSHIFT') and ev.state == 1:
+                    if self.chooseHold in self.searchTxts:
+                        self.grid[self.focus[1]][self.focus[0]] = self.searchTxts[self.chooseHold]
+                    self.mode = ScreenModes.LAYOUT
+                elif ev.state == 1 or (ev.heldFor > 0.8 and ev.heldFrames % 4 == 0):
+                    change = True
                     if ev == 'BACKSPACE':
                         self.searching = self.searching[:-1]
                     elif ev.unicode is not None:
                         self.searching += ev.unicode
+            if change:
+                self._search()
+
+    def _search(self):
+        def searchPro(txt):
+            self.searchTxts = {
+                0: 'This is the\ntopleft',
+                1: 'This is\nthe topright',
+                2: 'This is the\nbottomright',
+                3: 'This is the\nbottomleft',
+                4: 'This is\nthe top',
+                5: 'This is\nthe right',
+                6: 'This is the\nbottom',
+                7: 'This is\nthe left'
+            }
+        if self.searchPro is not None:
+            pro = self.searchPro
+            self.searchPro = None
+            pro.join()
+        self.searchTxts = {}
+        self.searchPro = Thread(target=searchPro, args=(self.searching,), daemon=True)
+        self.searchPro.start()
 
     def resetScreens(self):
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
@@ -346,24 +383,30 @@ class TerminalAPI:
                 '\\': round(baselen*0.7),
                 '-': baselen*2,
             }
-            for chr, weight, dir, txt in [
-                ('|', (0.5, 0), (0, -1), 'This is\nthe top'),
-                ('/', (1, 0), (1, -1), 'This is\nthe topright'),
-                ('-', (1, 0.5), (1, 0), 'This is\nthe right'),
-                ('\\',(1, 1), (1, 1), 'This is the\nbottomright'),
-                ('|', (0.5, 1), (0, 1), 'This is the\nbottom'),
-                ('/', (0, 1), (-1, 1), 'This is the\nbottomleft'),
-                ('-', (0, 0.5), (-1, 0), 'This is\nthe left'),
-                ('\\',(0, 0), (-1, -1), 'This is the\ntopleft')
-            ]:
+            for idx, (chr, weight, dir) in enumerate([
+                ('\\',(0, 0), (-1, -1)),
+                ('/', (1, 0), (1, -1)),
+                ('\\',(1, 1), (1, 1)),
+                ('/', (0, 1), (-1, 1)),
+                ('|', (0.5, 0), (0, -1)),
+                ('-', (1, 0.5), (1, 0)),
+                ('|', (0.5, 1), (0, 1)),
+                ('-', (0, 0.5), (-1, 0)),
+            ]):
+                if idx not in self.searchTxts:
+                    continue
+                if self.chooseHold == idx:
+                    txtFun = lambda t: f'\033[105;30m{t}\033[0m'
+                else:
+                    txtFun = lambda t: t
                 for idx in range(lens[chr]):
-                    self.Screen.Write(int((sze[0]-MAX_LEN)/2-1+(MAX_LEN+1)*weight[0]+dir[0]*idx), int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*idx), chr)
-                lines = txt.split('\n')
+                    self.Screen.Write(int((sze[0]-MAX_LEN)/2-1+(MAX_LEN+1)*weight[0]+dir[0]*idx), int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*idx), txtFun(chr))
+                lines = self.searchTxts[idx].split('\n')
                 ml = max(len(i) for i in lines)
                 sx = int((sze[0]-MAX_LEN  )/2-1+(MAX_LEN+1  )*weight[0]+dir[0]*lens[chr]+ml        *(weight[0]-1))
                 sy = int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*lens[chr]+len(lines)*(weight[1]-1))
                 for idx, ln in enumerate(lines):
-                    self.Screen.Write(sx+(ml-len(ln))//2, sy+idx, ln)
+                    self.Screen.Write(sx+(ml-len(ln))//2, sy+idx, txtFun(ln))
 
             self.searching = self.searching[:MAX_LEN*MAX_LINES]
             FILLER = '⓿'
@@ -375,7 +418,7 @@ class TerminalAPI:
                 lines[ln] = ('_'*tlen+lnt+'_'*tlen+'_')[:MAX_LEN]
             midy = (sze[1]-len(lines)+1)//2
             for idx, ln in enumerate(lines):
-                self.Screen.Write((sze[0]-len(ln))//2, midy+idx, ln.replace(FILLER, ['\033[7m_\033[27m', ' '][math.floor(time.time()%1.5)]))
+                self.Screen.Write((sze[0]-len(ln))//2, midy+idx, '\033[0m', ln.replace(FILLER, ['\033[7m_\033[27m', ' '][math.floor(time.time()%1.5)]))
     
     def _print_borders(self):
         sze = self.get_terminal_size()

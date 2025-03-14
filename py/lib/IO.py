@@ -82,20 +82,27 @@ class Key:
         return infset
     def __repr__(self):
         return f'<Key event: {str(self)}: {["up", "down", "hold"][self.state]} held for {self.heldFor}>'
+
+    @property
+    def _infSet(self):
+        infset = set((self.keyName,))
+        if self.shift:
+            infset.add('SHIFT')
+        if self.ctrl:
+            infset.add('CTRL')
+        if self.alt:
+            infset.add('ALT')
+        if self.super:
+            infset.add('SUPER')
+        return infset
+    
+    def __iter__(self):
+        return iter(self._infSet)
     
     def __eq__(self, other):
         if isinstance(other, Key):
             return all(getattr(self, i) == getattr(other, i) for i in ('scancode', 'state', 'shift', 'ctrl', 'alt', 'super'))
-        infset = set((self.keyName,))
-        if self.shift:
-            infset.add('shift')
-        if self.ctrl:
-            infset.add('ctrl')
-        if self.alt:
-            infset.add('alt')
-        if self.super:
-            infset.add('super')
-        return set(str(other).split('+')) == infset
+        return set(i.upper() for i in str(other).split('+')) == self._infSet
 
 class KbdInp:
     def __init__(self):

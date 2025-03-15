@@ -342,6 +342,12 @@ class TerminalAPI:
                         self.layout[self.focus[1]][0][self.focus[0]-1] -= 1
                         self._fixFocus()
         elif self.mode == ScreenModes.CHOOSE:
+            sze = self.get_terminal_size()
+            MAX_LEN = round(sze[0]/5)
+            MAX_LINES = round(sze[1]/5)
+            FILLER = '⓿'
+            if FILLER not in self.searching:
+                self.searching += FILLER
             self.chooseHold = None
             MAP = {
                 'u': 'ctrl+UP', 'd': 'ctrl+DOWN', 'l': 'ctrl+LEFT', 'r': 'ctrl+RIGHT'
@@ -355,22 +361,58 @@ class TerminalAPI:
                     break
             change = False
             for ev in self.events:
-                if ev == 'ESC' and ev.state == 1:
-                    self.mode = ScreenModes.LAYOUT
-                elif ev in ('ctrl+ENTER', 'ctrl+shift+ENTER', 'ENTER', 'ctrl+LEFTSHIFT', 'ctrl+RIGHTSHIFT') and ev.state == 1:
-                    if self.chooseHold in self.searchTxts:
-                        self.grid[self.focus[1]][self.focus[0]] = self.searchTxts[self.chooseHold]()
-                    self.mode = ScreenModes.LAYOUT
-                elif ev.state == 1 or (ev.heldFor > 0.8 and ev.heldFrames % 4 == 0):
-                    change = True
+                change_now = False
+                if ev.state == 1:
+                    if ev == 'ESC':
+                        self.mode = ScreenModes.LAYOUT
+                    elif ev in ('ctrl+ENTER', 'ctrl+shift+ENTER', 'ENTER', 'ctrl+LEFTSHIFT', 'ctrl+RIGHTSHIFT'):
+                        if self.chooseHold in self.searchTxts:
+                            self.grid[self.focus[1]][self.focus[0]] = self.searchTxts[self.chooseHold]()
+                        self.mode = ScreenModes.LAYOUT
+                    elif ev == 'UP':
+                        self.searching = self.searching[:max(self.searching.index(FILLER)-MAX_LEN, 0)].replace(FILLER, '')+\
+                                         FILLER+\
+                                         self.searching[max(self.searching.index(FILLER)-MAX_LEN, 0):].replace(FILLER, '')
+                    elif ev == 'DOWN':
+                        self.searching = self.searching[:self.searching.index(FILLER)+MAX_LEN+1].replace(FILLER, '')+\
+                                         FILLER+\
+                                         self.searching[self.searching.index(FILLER)+MAX_LEN+1:].replace(FILLER, '')
+                    elif ev == 'LEFT':
+                        self.searching = self.searching[:max(self.searching.index(FILLER)-1, 0)].replace(FILLER, '')+\
+                                         FILLER+\
+                                         self.searching[max(self.searching.index(FILLER)-1, 0):].replace(FILLER, '')
+                    elif ev == 'RIGHT':
+                        self.searching = self.searching[:self.searching.index(FILLER)+2].replace(FILLER, '')+\
+                                         FILLER+\
+                                         self.searching[self.searching.index(FILLER)+2:].replace(FILLER, '')
+                if ev.state == 1 or (ev.heldFor > 0.8 and ev.heldFrames % 4 == 0):
                     if ev == 'BACKSPACE':
-                        self.searching = self.searching[:-1]
+                        self.searching = self.searching[:self.searching.index(FILLER)-1].replace(FILLER, '')+\
+                                         FILLER+\
+                                         self.searching[self.searching.index(FILLER)+1:].replace(FILLER, '')
+                        change_now = True
+                    elif ev == 'DELETE':
+                        self.searching = self.searching[:self.searching.index(FILLER)].replace(FILLER, '')+\
+                                         FILLER+\
+                                         self.searching[self.searching.index(FILLER)+2:].replace(FILLER, '')
+                        change_now = True
                     elif ev.unicode is not None:
-                        self.searching += ev.unicode
+                        self.searching = self.searching[:self.searching.index(FILLER)].replace(FILLER, '')+\
+                                         ev.unicode+\
+                                         FILLER+\
+                                         self.searching[self.searching.index(FILLER)+1:].replace(FILLER, '')
+                        change_now = True
+                if change_now:
+                    change = True
+                    if FILLER not in self.searching:
+                        self.searching = self.searching + FILLER
+                    self.searching = self.searching[:MAX_LEN*MAX_LINES+1]
+
             if change:
                 self._search()
 
     def _search(self):
+        txt = self.searching.replace('⓿', '')
         results = self.allApps
         self.searchTxts = {}
         for idx, res in enumerate(results[:4]): # First picks get edges
@@ -400,7 +442,6 @@ class TerminalAPI:
             sze = self.get_terminal_size()
             MAX_LEN = round(sze[0]/5)
             MAX_LINES = round(sze[1]/5)
-            sze = self.get_terminal_size()
 
             baselen = round(sze[0]/20)
             lens = {
@@ -436,20 +477,17 @@ class TerminalAPI:
                     if idx2 == 0:
                         ptxt = f'\033[1m{ptxt}\033[0m'
                     self.Screen.Write(sx+(ml-len(ln))//2, sy+idx2, ptxt)
-
-            self.searching = self.searching[:MAX_LEN*MAX_LINES]
-            FILLER = '⓿'
-            txt = self.searching+FILLER
+            
             lines = ['_'*MAX_LEN for _ in range(MAX_LINES)]
-            for ln in range(min(math.ceil(len(txt)/MAX_LEN), MAX_LINES)):
-                lnt = txt[ln*MAX_LEN:(ln+1)*MAX_LEN]
+            for ln in range(min(math.ceil(len(self.searching)/MAX_LEN), MAX_LINES)):
+                lnt = self.searching[ln*MAX_LEN:(ln+1)*MAX_LEN]
                 tlen = (MAX_LEN-len(lnt))//2
                 lines[ln] = ('_'*tlen+lnt+'_'*tlen+'_')[:MAX_LEN]
             midy = (sze[1]-len(lines)+1)//2
             for idx, ln in enumerate(lines):
-                self.Screen.Write((sze[0]-len(ln))//2, midy+idx, '\033[0m', ln.replace(FILLER, ['\033[7m_\033[27m', ' '][math.floor(time.time()%1.5)]))
+                self.Screen.Write((sze[0]-len(ln))//2, midy+idx, '\033[0m', ln.replace('⓿', ['\033[7m_\033[27m', ' '][math.floor(time.time()%1.5)]))
         elif self.mode == ScreenModes.LAYOUT:
-            self.bottomTxt = '←↑→↓: choose | WASD: resize | ctrl+WASD: create | ctrl+alt+WASD: remove | slash: select app | space: move app | esc: exit'
+            self.bottomTxt = '←↑→↓: choose | WASD: resize | ctrl+WASD: create | ctrl+alt+WASD: remove | /: select app | space: move app | esc: exit'
     
     def _print_borders(self):
         sze = self.get_terminal_size()

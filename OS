@@ -1,0 +1,3 @@
+#!/bin/sh
+cd py
+../rootfs/pycore/bin/python3.12 OS.py

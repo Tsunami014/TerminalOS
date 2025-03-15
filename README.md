@@ -9,14 +9,14 @@ This probably won't work on most other OS's. I haven't tested it, but it *may* w
 - `xsel` (for clipboard functionality)
 
 # To run
-Run `sudo OS.py` to start the OS. To exit press `Esc` or `Ctrl+C`.
+MAKE SURE TO MAKE IT A BOOTABLE OS FIRST. You need to run up to step 5, as you need the python stuff in the `rootfs` folder. Once you've done that, just run `OS` and it will start up the OS in the terminal - running the OS inside the `rootfs` folder using the python in that folder too.
 
 ## To add more apps
 Download some python files, **MAKING FULL CARE AS TO NOT DOWNLOAD MALICIOUS CODE**, as this will run any code it sees. Put them in the `external` folder (make one if it doesn't exist) in this directory and they will be added to the OS.
 
 # To use in virtual terminal
 To use this in the virtual terminal, press <kbd>ctrl</kbd>+<kbd>alt</kbd>+<kbd>F1-12</kbd> and sign in. Then run the script as you would in a normal terminal.
-I suggest tty1 (<kbd>ctrl</kbd>+<kbd>alt</kbd>+<kbd>F1</kbd>) as it is the first one and is the most likely to be free. And with most systems, you can press <kbd>ctrl</kbd>+<kbd>alt</kbd>+<kbd>F7</kbd> to return to the GUI (if not just try every one until one works).
+I suggest tty1 (<kbd>ctrl</kbd>+<kbd>alt</kbd>+<kbd>F1</kbd>) as it is the first one and is the most likely to be free. And with most systems, you can press <kbd>ctrl</kbd>+<kbd>alt</kbd>+<kbd>F7</kbd> to return to the GUI (if not just try every one until one works). Then follow the ['to run'](#to-run) instructions above.
 
 # To make into a bootable OS
 1. Download python and build it manually into a `rootfs` (root filesystem) directory

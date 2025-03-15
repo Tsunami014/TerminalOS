@@ -137,6 +137,7 @@ class TerminalAPI:
         self.selected = None
         self.searching = ''
         self.searchTxts = {}
+        self.bottomTxt = ''
         self.mode = ScreenModes.APPS
         self.Screen = Screen()
         self._oldScreen = Screen()
@@ -384,11 +385,18 @@ class TerminalAPI:
     def drawAll(self):
         if self.mode == ScreenModes.APPS:
             if self.fullscreen is not None:
+                self.bottomTxt = ''
                 self.fullscreen.draw()
             else:
+                focusApp = self.grid[self.focus[1]][self.focus[0]]
                 for elm in self.allLoadedApps():
-                    elm.draw()
+                    if elm is not None and elm is not focusApp:
+                        elm.draw()
+                self.bottomTxt = ''
+                if focusApp is not None: # Draw this last so it can set self.bottomTxt
+                    focusApp.draw()
         elif self.mode == ScreenModes.CHOOSE:
+            self.bottomTxt = 'ctrl+←↑→↓: choose | shift/enter: apply | esc: exit'
             sze = self.get_terminal_size()
             MAX_LEN = round(sze[0]/5)
             MAX_LINES = round(sze[1]/5)
@@ -440,6 +448,8 @@ class TerminalAPI:
             midy = (sze[1]-len(lines)+1)//2
             for idx, ln in enumerate(lines):
                 self.Screen.Write((sze[0]-len(ln))//2, midy+idx, '\033[0m', ln.replace(FILLER, ['\033[7m_\033[27m', ' '][math.floor(time.time()%1.5)]))
+        elif self.mode == ScreenModes.LAYOUT:
+            self.bottomTxt = '←↑→↓: choose | WASD: resize | ctrl+WASD: create | ctrl+alt+WASD: remove | slash: select app | space: move app | esc: exit'
     
     def _print_borders(self):
         sze = self.get_terminal_size()
@@ -485,6 +495,7 @@ class TerminalAPI:
                     for iy in range(1+sy, sy+h):
                         self.Screen.Write(sx, iy, '│')
             sy += h
+        self.Screen.Write(sze[0]-1-len(self.bottomTxt), sze[1]-1, self.bottomTxt)
         
         if self.mode == ScreenModes.LAYOUT:
             hs = [i[1] for i in self.layout[:-1]]
@@ -499,7 +510,7 @@ class TerminalAPI:
                 x2 = min(sum(ws[:self.focus[0]+1]+[0]), sze[0]-1)
                 if y == mxy:
                     self.Screen.Write(x1, y, f'\033[{extra}m', self.Screen.Get(x1, y))
-                    self.Screen.Write(x2, y, '+\033[0m')
+                    self.Screen.Write(x2, y, self.Screen.Get(x2, y), '\033[0m')
                 else:
                     self.Screen.Write(x1, y, '\033[7m', self.Screen.Get(x1, y))
                     self.Screen.Write(x2, y, f'\033[{extra}m{self.Screen.Get(x2, y)}\033[0m')

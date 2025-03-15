@@ -339,7 +339,7 @@ class TerminalAPI:
             for ev in self.events:
                 if ev == 'ESC' and ev.state == 1:
                     self.mode = ScreenModes.LAYOUT
-                elif ev in ('ctrl+ENTER', 'ENTER') and ev.state == 1:
+                elif ev in ('ctrl+ENTER', 'ctrl+shift+ENTER', 'ENTER', 'ctrl+LEFTSHIFT', 'ctrl+RIGHTSHIFT') and ev.state == 1:
                     if self.chooseHold in self.searchTxts:
                         self.grid[self.focus[1]][self.focus[0]] = self.searchTxts[self.chooseHold]()
                     self.mode = ScreenModes.LAYOUT
@@ -612,17 +612,21 @@ class ContainerWidgets(list):
             return new
         return super().__getitem__(idx)
 
-class Widget:
-    parent: Container
+class WidgetMeta(type):
+    def __new__(cls, name, bases, class_dict):
+        new_class = super().__new__(cls, name, bases, class_dict)
+        def newNew(cls, *args, **kwargs):
+            def new(parent):
+                elm = object.__new__(cls)
+                elm.parent = parent
+                elm.__init__(*args, **kwargs)
+                return elm
+            return new
+        new_class.__new__ = newNew
+        return new_class
 
-    def __new__(cls, *args, **kwargs):
-        sup_new = super().__new__
-        def new(parent):
-            elm = sup_new(cls)
-            elm.parent = parent
-            elm.__init__(*args, **kwargs)
-            return elm
-        return new
+class Widget(metaclass=WidgetMeta):
+    parent: Container
     
     def __del__(self):
         if self in self.parent.widgets:
@@ -653,13 +657,11 @@ class PositionedWidget(Widget):
     def __init__(self, pos: Position):
         self._pos = pos
     
-    @property
     def pos(self):
-        return self._pos((self.width, self.height), self.API.get_terminal_size)
+        return self._pos((self.width, self.height), self.API.get_terminal_size())
     
-    @property
     def realPos(self):
-        x, y = self._pos((self.width, self.height), self.API.get_terminal_size)
+        x, y = self._pos((self.width, self.height), self.API.get_terminal_size())
         return x+self.parent.x, y+self.parent.y
 
 class Popup(Container):

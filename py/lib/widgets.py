@@ -45,7 +45,7 @@ class Text(PositionedWidget):
         
         self.width, self.height = max(strLen(i) for i in lines), len(lines)
 
-        x, y = self.pos
+        x, y = self.pos()
         
         for idx, line in enumerate(lines):
             self._Write(x, y+idx, line)
@@ -57,7 +57,7 @@ class Button(Text):
     
     @property
     def isHovering(self):
-        rp = self.realPos
+        rp = self.realPos()
         return self.API.Mouse[0] > rp[0] and self.API.Mouse[0] <= rp[0]+self.width and \
                self.API.Mouse[1] > rp[1] and self.API.Mouse[1] <= rp[1]+self.height
     
@@ -75,7 +75,7 @@ class Button(Text):
         #     lines = [f'\033[38;5;250;48;5;237m {i} \033[39;49m' for i in lines] + ['\033[48;5;237;38;5;246m'+'_'*self.width+'\033[39;49m']
         # lines = [f'\033[100m {i} \033[49m' for i in lines] + ['\033[100;38;5;250m'+'_'*self.width+'\033[39;49m']
 
-        x, y = self.pos
+        x, y = self.pos()
         
         for idx, line in enumerate(lines):
             self._Write(x, y+idx, line)
@@ -115,7 +115,7 @@ class TextInput(PositionedWidget):
         if self.max_height:
             self.height = min(self.height, self.max_height)
 
-        x, y = self.pos
+        x, y = self.pos()
         
         for idx, line in enumerate(lines[:self.height]):
             self._Write(x, y+idx, line)
@@ -168,7 +168,7 @@ class TextInput(PositionedWidget):
     
     @property
     def isHovering(self):
-        rp = self.realPos
+        rp = self.realPos()
         return self.API.Mouse[0] > rp[0] and self.API.Mouse[0] <= rp[0]+self.width+1 and \
                self.API.Mouse[1] > rp[1] and self.API.Mouse[1] <= rp[1]+self.height
     
@@ -201,7 +201,7 @@ class TextInput(PositionedWidget):
     def update(self):
         if self.API.LMBP:
             if self.isHovering:
-                rp = self.realPos
+                rp = self.realPos()
                 mp = self.API.Mouse
                 self.cursor = mp[0]-rp[0]-1, mp[1]-rp[1]-1
                 self.fix_cursor(justCapX=True)

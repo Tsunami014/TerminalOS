@@ -1,8 +1,8 @@
+from random import randint
 from enum import Enum
 import math
 import re
 import sys
-from threading import Thread
 import time
 import shutil
 
@@ -13,13 +13,10 @@ __all__ = [
         'StaticPos',
         'RelativePos',
     'Container',
-        'Window',
-            'FullscreenWindow',
         'Popup',
     'Widget',
         'PositionedWidget',
-    'App',
-        'FullscreenApp',
+    'App'
 ]
 
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -127,9 +124,12 @@ class TerminalAPI:
         return cls._instance
     
     def __init__(self):
+        if hasattr(self, '_initialized'):
+            return
+        self._initialized = True
         self.events = []
+        self.allApps = []
         self.fullscreen = None
-        self.windows = []
         self.focus = [0, 0]
         self.layout = [[[], None]]
         self.chooseHold = None
@@ -137,26 +137,40 @@ class TerminalAPI:
         self.selected = None
         self.searching = ''
         self.searchTxts = {}
-        self.searchPro = None
-        self.mode = ScreenModes.LAYOUT
+        self.mode = ScreenModes.APPS
         self.Screen = Screen()
         self._oldScreen = Screen()
     
+    def allLoadedApps(self, container=None):
+        if container is None:
+            container = self.grid
+        for i in container:
+            if isinstance(i, list):
+                yield from self.allLoadedApps(i)
+            elif i is not None:
+                yield i
+
     def updateAll(self):
         if self.mode == ScreenModes.APPS:
+            for ev in self.events:
+                if ev.state == 1 and ev == 'super+A':
+                    self.mode = ScreenModes.LAYOUT
             if self.fullscreen is not None:
                 self.fullscreen.update()
-                for elm in self.windows:
+                for elm in self.allLoadedApps():
                     if elm.DRAW_WHILE_FULL:
                         elm.update()
                 return 
-            for elm in self.windows:
+            for elm in self.allLoadedApps():
                 elm.update()
         elif self.mode == ScreenModes.LAYOUT:
             sze = self.get_terminal_size()
             for ev in self.events:
                 changed_now = False
                 if ev.state == 1:
+                    if ev == 'ESC':
+                        self.mode = ScreenModes.APPS
+                    
                     # Creation - ctrl+<>
                     if ev == 'ctrl+W':
                         hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
@@ -256,6 +270,8 @@ class TerminalAPI:
                     elif ev in ('BACKSPACE', 'DELETE'):
                         self.grid[self.focus[1]][self.focus[0]] = None
                     elif ev == 'ENTER':
+                        self.mode = ScreenModes.APPS
+                    elif ev == 'SLASH':
                         self.mode = ScreenModes.CHOOSE
                         self.searching = ''
                         self._search()
@@ -323,9 +339,9 @@ class TerminalAPI:
             for ev in self.events:
                 if ev == 'ESC' and ev.state == 1:
                     self.mode = ScreenModes.LAYOUT
-                elif ev in ('ctrl+LEFTSHIFT', 'ctrl+RIGHTSHIFT') and ev.state == 1:
+                elif ev in ('ctrl+ENTER', 'ENTER') and ev.state == 1:
                     if self.chooseHold in self.searchTxts:
-                        self.grid[self.focus[1]][self.focus[0]] = self.searchTxts[self.chooseHold]
+                        self.grid[self.focus[1]][self.focus[0]] = self.searchTxts[self.chooseHold]()
                     self.mode = ScreenModes.LAYOUT
                 elif ev.state == 1 or (ev.heldFor > 0.8 and ev.heldFrames % 4 == 0):
                     change = True
@@ -337,24 +353,12 @@ class TerminalAPI:
                 self._search()
 
     def _search(self):
-        def searchPro(txt):
-            self.searchTxts = {
-                0: 'This is the\ntopleft',
-                1: 'This is\nthe topright',
-                2: 'This is the\nbottomright',
-                3: 'This is the\nbottomleft',
-                4: 'This is\nthe top',
-                5: 'This is\nthe right',
-                6: 'This is the\nbottom',
-                7: 'This is\nthe left'
-            }
-        if self.searchPro is not None:
-            pro = self.searchPro
-            self.searchPro = None
-            pro.join()
+        results = self.allApps
         self.searchTxts = {}
-        self.searchPro = Thread(target=searchPro, args=(self.searching,), daemon=True)
-        self.searchPro.start()
+        for idx, res in enumerate(results[:4]): # First picks get edges
+            self.searchTxts[idx+4] = res
+        for idx, res in enumerate(results[4:8]): # Next picks get corners
+            self.searchTxts[idx] = res
 
     def resetScreens(self):
         self._oldScreen, self.Screen = self.Screen, self._oldScreen
@@ -364,11 +368,11 @@ class TerminalAPI:
         if self.mode == ScreenModes.APPS:
             if self.fullscreen is not None:
                 self.fullscreen.draw()
-                for elm in self.windows:
+                for elm in self.allLoadedApps():
                     if elm.DRAW_WHILE_FULL:
                         elm.draw()
             else:
-                for elm in self.windows:
+                for elm in self.allLoadedApps():
                     elm.draw()
         elif self.mode == ScreenModes.CHOOSE:
             sze = self.get_terminal_size()
@@ -399,14 +403,17 @@ class TerminalAPI:
                     txtFun = lambda t: f'\033[105;30m{t}\033[0m'
                 else:
                     txtFun = lambda t: t
-                for idx in range(lens[chr]):
-                    self.Screen.Write(int((sze[0]-MAX_LEN)/2-1+(MAX_LEN+1)*weight[0]+dir[0]*idx), int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*idx), txtFun(chr))
-                lines = self.searchTxts[idx].split('\n')
+                for idx2 in range(lens[chr]):
+                    self.Screen.Write(int((sze[0]-MAX_LEN)/2-1+(MAX_LEN+1)*weight[0]+dir[0]*idx2), int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*idx2), txtFun(chr))
+                lines = str(self.searchTxts[idx]).split('\n')
                 ml = max(len(i) for i in lines)
                 sx = int((sze[0]-MAX_LEN  )/2-1+(MAX_LEN+1  )*weight[0]+dir[0]*lens[chr]+ml        *(weight[0]-1))
                 sy = int((sze[1]-MAX_LINES)/2-1+(MAX_LINES+1)*weight[1]+dir[1]*lens[chr]+len(lines)*(weight[1]-1))
-                for idx, ln in enumerate(lines):
-                    self.Screen.Write(sx+(ml-len(ln))//2, sy+idx, txtFun(ln))
+                for idx2, ln in enumerate(lines):
+                    ptxt = txtFun(ln)
+                    if idx2 == 0:
+                        ptxt = f'\033[1m{ptxt}\033[0m'
+                    self.Screen.Write(sx+(ml-len(ln))//2, sy+idx2, ptxt)
 
             self.searching = self.searching[:MAX_LEN*MAX_LINES]
             FILLER = '⓿'
@@ -449,7 +456,7 @@ class TerminalAPI:
                     if txt is not None:
                         if w is None:
                             w = sze[0]-sx
-                        lines = txt.split('\n')
+                        lines = str(txt).split('\n')
                         midy = sy+max(h-len(lines)+1-int(thisSel)*2, 0)//2
                         for idx, ln in enumerate(lines[:h]):
                             self.Screen.Write(sx+max(w-len(ln)-int(thisSel)*2, 0)//2, midy+idx, ln[:w])
@@ -520,14 +527,14 @@ class TerminalAPI:
         return sze.columns, sze.lines
 
 class Position:
-    def __call__(self, size, winSzefun, parentFull):
+    def __call__(self, size, winSze):
         return (0, 0)
 
 class StaticPos(Position):
     def __init__(self, x, y):
         self.x, self.y = x, y
     
-    def __call__(self, size, winSzefun, parentFull):
+    def __call__(self, size, winSze):
         return (self.x, self.y)
 
 class RelativePos(Position):
@@ -535,7 +542,7 @@ class RelativePos(Position):
         self.weight = (weight_x, weight_y)
         self.force = (force_x, force_y)
     
-    def __call__(self, size, winSze, parentFull):
+    def __call__(self, size, winSze):
         out = []
         for i in range(2):
             if self.force[i] is not None:
@@ -629,7 +636,7 @@ class Widget:
         pass
 
     def update(self):
-        return False
+        pass
     
     @property
     def _Screen(self) -> Screen:
@@ -648,203 +655,12 @@ class PositionedWidget(Widget):
     
     @property
     def pos(self):
-        return self._pos((self.width, self.height), self.API.get_terminal_size, self.parent.isFullscreen)
+        return self._pos((self.width, self.height), self.API.get_terminal_size)
     
     @property
     def realPos(self):
-        x, y = self._pos((self.width, self.height), self.API.get_terminal_size, self.parent.isFullscreen)
+        x, y = self._pos((self.width, self.height), self.API.get_terminal_size)
         return x+self.parent.x, y+self.parent.y
-
-class Window(Container):
-    def __init__(self, x, y, *widgets):
-        self.x = x
-        self.y = y
-        self.widgets = ContainerWidgets(self, widgets)
-        self.Screen = Screen()
-        self._oldpos = None
-        self._width = 0
-        self._height = 0
-        self._grabbed = None
-        self._moved = False
-    
-    def draw(self):
-        self.Screen.Clear()
-        for widget in self.widgets:
-            widget.draw()
-        
-        if self.Screen.screen == {}:
-            lines = []
-        else:
-            lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
-        for idx, line in self.Screen.screen.items():
-            lines[idx] = str(line)
-
-        isFull = self.isFullscreen
-        if isFull:
-            width, height = self.API.get_terminal_size()
-            width -= 2
-            height -= 2
-        else:
-            width, height = max(strLen(i) for i in (lines or [''])), len(lines)
-        x, y = self.x, self.y
-        self._width = width
-        self._height = height
-        if isFull:
-            self._Write(width, 0, ']X')
-            for idx, ln in enumerate(lines):
-                self._Write(x+1, y+idx+1, ln)
-        else:
-            self._Write(x, y, '╭', '─'*(width-1), '[X')
-            for idx, ln in enumerate(lines):
-                self._Write(x, y+idx+1, '│', *split(ln)[:self.size[0]-2], " "*(width-strLen(ln)), '\033[0m│')
-            t = '│'+' '*width+'│'
-            for idx in range(len(lines), height):
-                self._Write(x, y+idx+1, t)
-            self._Write(x, y+height+1, '╰', '─'*width, '╯')
-    
-    @property
-    def width(self):
-        return self._width + 2
-    @property
-    def height(self):
-        return self._height + 2
-    
-    def fullscreen(self):
-        self._oldpos = (self.x, self.y)
-        self.x, self.y = 0, 0
-        return super().fullscreen()
-    
-    def unfullscreen(self):
-        if self._oldpos is not None:
-            self.x, self.y = self._oldpos
-        return super().unfullscreen()
-    
-    def update(self):
-        ret = False
-        for wid in self.widgets:
-            if wid.update():
-                ret = True
-        return ret
-
-    def __str__(self):
-        return '<Window object>'
-    def __repr__(self): return str(self)
-
-class ResizableWindow(Window):
-    def __init__(self, x, y, startWid, startHei, *widgets):
-        super().__init__(x, y, *widgets)
-        self.size = (startWid, startHei)
-        self._grabbingSize = None
-    
-    def draw(self):
-        self.Screen.Clear()
-        for widget in self.widgets:
-            widget.draw()
-        
-        if self.Screen.screen == {}:
-            lines = []
-        else:
-            lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
-        for idx, line in self.Screen.screen.items():
-            lines[idx] = str(line)
-        
-        x, y = self.x, self.y
-        if self.isFullscreen:
-            width, height = self.API.get_terminal_size()
-            self._Write(width-2, 0, ']X')
-            for idx, ln in enumerate(lines):
-                self._Write(x+1, y+idx+1, ln)
-        else:
-            self._Write(x, y, '╭', '─'*(self.size[0]-3), '[X')
-            for idx, ln in enumerate(lines[:self.size[1]-2]):
-                self._Write(x, y+idx+1, '│', *split(ln)[:self.size[0]-2], " "*(self.size[0]-2-strLen(ln)), '\033[0m│')
-            t = '│'+' '*(self.size[0]-2)+'│'
-            for idx in range(len(lines), self.size[1]-2):
-                self._Write(x, y+idx+1, t)
-            self._Write(x, y+self.size[1]-1, '╰', '─'*(self.size[0]-2), '+')
-    
-    @property
-    def width(self):
-        if self.isFullscreen:
-            return self.API.get_terminal_size()[0]
-        return self.size[0]
-    @property
-    def height(self):
-        if self.isFullscreen:
-            return self.API.get_terminal_size()[1]
-        return self.size[1]
-
-    def update(self):
-        return super().update()
-
-class FullscreenWindow(Window):
-    """
-    A Window that MUST ALWAYS be fullscreen.
-    """
-    def __init__(self, *widgets):
-        super().__init__(0, 0, *widgets)
-        self.fullscreen()
-    
-    def unfullscreen(self):
-        pass
-
-    def draw(self):
-        self.Screen.Clear()
-        for widget in self.widgets:
-            widget.draw()
-        
-        if self.Screen.screen == {}:
-            lines = []
-        else:
-            lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
-        for idx, line in self.Screen.screen.items():
-            lines[idx] = str(line)
-
-        isFull = self.isFullscreen
-        if isFull:
-            width, height = self.API.get_terminal_size()
-            width -= 2
-            height -= 2
-        else:
-            width, height = max(strLen(i) for i in (lines or [''])), len(lines)
-        self._width = width
-        self._height = height
-        self._Write(width+1, 0, 'X')
-        for idx, ln in enumerate(lines):
-            self._Write(1, idx+1, f'{ln}{" "*(width-strLen(ln))}')
-
-    def __del__(self):
-        if self.isFullscreen:
-            super().unfullscreen()
-        if self in self.API.elms:
-            self.API.elms.remove(self)
-    
-    def update(self):
-        if not self.isFullscreen:
-            if self.API.fullscreen is None:
-                self.fullscreen()
-        ret = False
-        for wid in self.widgets:
-            if wid.update():
-                ret = True
-        if self.API.LMB:
-            if self._grabbed is None:
-                if self.API.LMBP:
-                    mpos = self.API.Mouse
-                    if mpos[1] == self.y and self.x <= mpos[0] < (self.x+self.width):
-                        self._moved = False
-                        self._grabbed = mpos
-            elif not self._moved:
-                if self._grabbed != self.API.Mouse:
-                    self._moved = True
-        else:
-            if not (self._moved or self._grabbed is None):
-                if self._grabbed == (self.x+self.width-1, self.y):
-                    self.__del__()
-                    return True
-            self._grabbed = None
-        
-        return ret
 
 class Popup(Container):
     DRAW_WHILE_FULL = True
@@ -885,30 +701,83 @@ class Popup(Container):
             return True
         return super().update()
 
-class App:
-    Win: ResizableWindow
-    def __new__(cls, *args, **kwargs):
-        inst = super().__new__(cls, *args, **kwargs)
-        inst.Win = ResizableWindow(0, 0, 40, 10, *inst.init_widgets())
-        return inst
-    
-    def init_widgets(self) -> list[Widget]:
-        return []
-    
-    @property
-    def widgets(self):
-        return self.Win.widgets
-    
-    @widgets.setter
-    def widgets(self, val):
-        if isinstance(val, ContainerWidgets):
-            self.Win.widgets = val
-        else:
-            self.Win.widgets = ContainerWidgets(self.Win, val)
+class AppMeta(type):
+    API = TerminalAPI()
+    usedIIDs = {None}
+    def __new__(cls, name, bases, class_dict):
+        new_class = super().__new__(cls, name, bases, class_dict)
+        new_class.API = cls.API
+        niid = None
+        while niid in cls.usedIIDs:
+            niid = randint(0, 2147483646)
+        cls.usedIIDs.add(niid)
+        new_class._iid = niid
+        if bases != (object,) and bases != ():
+            cls.API.allApps.append(new_class)
+        return new_class
 
-class FullscreenApp(App):
-    Win: FullscreenWindow
-    def __new__(cls, *args, **kwargs):
-        inst = object.__new__(cls, *args, **kwargs)
-        inst.Win = FullscreenWindow(*inst.init_widgets())
-        return inst
+    def __str__(cls):
+        return getattr(cls, 'NAME', super().__str__())
+
+class App(metaclass=AppMeta):
+    NAME = 'DEFAULT APP'
+    API: TerminalAPI
+    _iid: str
+    def __init__(self, widgets=None):
+        self.Screen = None
+        self.widgets: list[Widget] = ContainerWidgets(self, widgets or [])
+    
+    def __hash__(self):
+        return self._iid
+    
+    def _gridPos(self):
+        for yidx, row in enumerate(self.API.grid):
+            if self in row:
+                return yidx, row.index(self)
+    
+    def Size(self, gridP=None):
+        if gridP is None:
+            y, x = self._gridPos()
+        else:
+            y, x = gridP
+        thisrow = self.API.layout[y]
+        tsze = self.API.get_terminal_size()
+        if thisrow[1] is None:
+            hei = tsze[1]-sum(i[1] for i in self.API.layout if i[1] is not None)
+        else:
+            hei = thisrow[1]
+        
+        if x >= len(thisrow[0]):
+            wid = tsze[0]-sum(thisrow[0])
+        else:
+            wid = thisrow[0][x]
+        
+        return wid, hei
+    
+    def Pos(self, gridP=None):
+        if gridP is None:
+            y, x = self._gridPos()
+        else:
+            y, x = gridP
+        return sum(self.API.layout[y][0][:x] or [0]), sum([i[1] for i in self.API.layout[:y]] or [0])
+    
+    def draw(self):
+        self.Screen = Screen()
+        for w in self.widgets:
+            w.draw()
+        
+        gridP = self._gridPos()
+        x, y = self.Pos(gridP)
+        wid, hei = self.Size(gridP)
+        for idx, ln in self.Screen.screen.items():
+            if idx <= hei-2:
+                self.API.Screen.Write(x+1, y+idx+1, *ln[:wid-2])
+
+    def update(self):
+        for w in self.widgets:
+            w.update()
+    
+    def __str__(self):
+        return self.NAME
+    def __repr__(self):
+        return f'<App {self.NAME}>'

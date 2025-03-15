@@ -40,7 +40,7 @@ cp /bin/busybox rootfs/bin/sh
 3. Get libraries required
 ```bash
 # Python libraries
-rootfs/pycore/bin/pip3.12 install evdev
+rootfs/pycore/bin/pip3.12 install evdev requests
 
 mkdir -p rootfs/lib rootfs/lib64
 
@@ -111,7 +111,7 @@ make altinstall
 cd ../
 
 # Get python libraries required
-rootfs/pycore/bin/pip3.12 install evdev
+rootfs/pycore/bin/pip3.12 install evdev requests
 
 # Get apps
 mkdir -p rootfs/bin

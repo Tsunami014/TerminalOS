@@ -1,5 +1,5 @@
 from difflib import get_close_matches
-from lib.API import App, FullscreenApp, Popup, StaticPos, RelativePos
+from lib.API import App, Popup, StaticPos, RelativePos
 import lib.widgets as wids
 import os
 import importlib
@@ -25,12 +25,12 @@ def loadExternals():
                 Popup(wids.Text(StaticPos(0, 0), f"Couldn't load external {file[:-3]}\nDoes not have a load method."), duration=5)
 
 class Help(App):
-    def init_widgets(self):
-        return [
-            wids.Text(StaticPos(0, 0), 'HI!')
-        ]
+    NAME = 'Help'
+    def __init__(self):
+        super().__init__([wids.Text(StaticPos(0, 0), 'HI!')])
 
-class SoftwareManager(FullscreenApp):
+class SoftwareManager(App):
+    NAME = 'Software Manager'
     def init_widgets(self):
         return [
             wids.TextInput(RelativePos(0.5, -1, 0, 0), max_width=20, max_height=1, placeholder='Search...'),

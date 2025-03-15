@@ -1,5 +1,5 @@
 from random import randint
-from enum import Enum
+from enum import IntEnum
 import math
 import re
 import sys
@@ -108,7 +108,7 @@ class Clipboard:
     def read(cls):
         return cls.CLIP[-1]
 
-class ScreenModes(Enum):
+class ScreenModes(IntEnum):
     APPS = 0
     """The app view"""
     LAYOUT = 1
@@ -149,24 +149,52 @@ class TerminalAPI:
                 yield from self.allLoadedApps(i)
             elif i is not None:
                 yield i
+    
+    def _fixFocus(self):
+        if self.focus[1] < 0:
+            self.focus[1] = 0
+        elif self.focus[1] >= len(self.layout):
+            self.focus[1] = len(self.layout)-1
+        
+        if self.focus[0] < 0:
+            self.focus[0] = 0
+        elif self.focus[0] > len(self.layout[self.focus[1]][0]):
+            self.focus[0] = len(self.layout[self.focus[1]][0])
 
     def updateAll(self):
         if self.mode == ScreenModes.APPS:
             for ev in self.events:
-                if ev.state == 1 and ev == 'super+A':
-                    self.mode = ScreenModes.LAYOUT
+                if ev.state == 1:
+                    if ev == 'super+A':
+                        self.mode = ScreenModes.LAYOUT
+                    # Arrow keys switch between
+                    elif ev == 'super+UP':
+                        self.focus[1] -= 1
+                        self._fixFocus()
+                    elif ev == 'super+DOWN':
+                        self.focus[1] += 1
+                        self._fixFocus()
+                    elif ev == 'super+LEFT':
+                        self.focus[0] -= 1
+                        self._fixFocus()
+                    elif ev == 'super+RIGHT':
+                        self.focus[0] += 1
+                        self._fixFocus()
             if self.fullscreen is not None:
-                self.fullscreen.update()
+                self.fullscreen.update(True)
                 for elm in self.allLoadedApps():
-                    if elm.DRAW_WHILE_FULL:
-                        elm.update()
-                return 
+                    if elm is not None and elm is not self.fullscreen and AppFlags.RunWhileFull in elm.FLAGS:
+                        elm.update(False)
+                return
+            focusApp = self.grid[self.focus[1]][self.focus[0]]
+            if focusApp is not None:
+                focusApp.update(True)
             for elm in self.allLoadedApps():
-                elm.update()
+                if elm is not None and elm is not focusApp and AppFlags.Background in elm.FLAGS:
+                    elm.update(False)
         elif self.mode == ScreenModes.LAYOUT:
             sze = self.get_terminal_size()
             for ev in self.events:
-                changed_now = False
                 if ev.state == 1:
                     if ev == 'ESC':
                         self.mode = ScreenModes.APPS
@@ -179,7 +207,7 @@ class TerminalAPI:
                             self.layout.insert(self.focus[1], [[], math.floor(hei)])
                             if self.focus[1]+1 < len(self.layout)-1:
                                 self.layout[self.focus[1]+1][1] = math.ceil(hei)
-                        changed_now = True
+                        self._fixFocus()
                     elif ev == 'ctrl+S':
                         hei = (self.layout[self.focus[1]][1] or sze[1]-sum([i[1] for i in self.layout if i[1]]+[0]))/2
                         if hei >= 2:
@@ -188,7 +216,7 @@ class TerminalAPI:
                             self.focus[1] += 1
                             if self.focus[1] < len(self.layout)-1:
                                 self.layout[self.focus[1]][1] = math.floor(hei)
-                            changed_now = True
+                            self._fixFocus()
                     elif ev == 'ctrl+A':
                         if self.focus[0] == len(self.layout[self.focus[1]][0]):
                             wid = (sze[0]-sum(self.layout[self.focus[1]][0]+[0]))/2
@@ -199,7 +227,7 @@ class TerminalAPI:
                         if wid >= 6:
                             self.grid[self.focus[1]].insert(self.focus[0], None)
                             self.layout[self.focus[1]][0].insert(self.focus[0], math.ceil(wid))
-                            changed_now = True
+                            self._fixFocus()
                     elif ev == 'ctrl+D':
                         if self.focus[0] == len(self.layout[self.focus[1]][0]):
                             wid = (sze[0]-sum(self.layout[self.focus[1]][0]+[0]))/2
@@ -211,7 +239,7 @@ class TerminalAPI:
                             self.grid[self.focus[1]].insert(self.focus[0], None)
                             self.layout[self.focus[1]][0].insert(self.focus[0], math.floor(wid))
                             self.focus[0] += 1
-                            changed_now = True
+                            self._fixFocus()
                     
                     # Deletion - ctrl+alt+<>
                     elif ev == 'ctrl+alt+W':
@@ -221,13 +249,13 @@ class TerminalAPI:
                             _, eh = self.layout.pop(self.focus[1])
                             if self.layout[self.focus[1]][1]:
                                 self.layout[self.focus[1]][1] += eh
-                            changed_now = True
+                            self._fixFocus()
                     elif ev == 'ctrl+alt+S':
                         if self.focus[1] < len(self.layout)-1:
                             self.grid.pop(self.focus[1])
                             _, eh = self.layout.pop(self.focus[1]+1)
                             self.layout[self.focus[1]][1] += eh
-                            changed_now = True
+                            self._fixFocus()
                     elif ev == 'ctrl+alt+A':
                         if self.focus[0] > 0:
                             self.focus[0] -= 1
@@ -235,7 +263,7 @@ class TerminalAPI:
                             ew = self.layout[self.focus[1]][0].pop(self.focus[0])
                             if self.focus[0] < len(self.layout[self.focus[1]][0]):
                                 self.layout[self.focus[1]][0][self.focus[0]] += ew
-                            changed_now = True
+                            self._fixFocus()
                     elif ev == 'ctrl+alt+D':
                         if self.focus[0] == len(self.layout[self.focus[1]][0])-1:
                             self.grid[self.focus[1]].pop(-1)
@@ -244,21 +272,21 @@ class TerminalAPI:
                             self.grid[self.focus[1]].pop(self.focus[0]+1)
                             ew = self.layout[self.focus[1]][0].pop(self.focus[0]+1)
                             self.layout[self.focus[1]][0][self.focus[0]] += ew
-                        changed_now = True
+                        self._fixFocus()
 
                     # Arrow keys switch between
                     elif ev == 'UP':
                         self.focus[1] -= 1
-                        changed_now = True
+                        self._fixFocus()
                     elif ev == 'DOWN':
                         self.focus[1] += 1
-                        changed_now = True
+                        self._fixFocus()
                     elif ev == 'LEFT':
                         self.focus[0] -= 1
-                        changed_now = True
+                        self._fixFocus()
                     elif ev == 'RIGHT':
                         self.focus[0] += 1
-                        changed_now = True
+                        self._fixFocus()
                     
                     elif ev == 'SPACE' or (ev == 'ENTER' and self.selected is not None):
                         if self.selected is not None:
@@ -281,48 +309,37 @@ class TerminalAPI:
                     if self.focus[1] < len(self.layout)-1:
                         if self.layout[self.focus[1]][1] > 3:
                             self.layout[self.focus[1]][1] -= 1
-                            changed_now = True
+                            self._fixFocus()
                     elif self.focus[1] > 0:
                         h = sze[1]-sum(i[1] for i in self.layout if i[1])
                         if h > 3:
                             self.layout[self.focus[1]-1][1] += 1
-                        changed_now = True
+                        self._fixFocus()
                 elif ev == 'S' and ev.heldFrames % 2 == 0:
                     if self.focus[1] < len(self.layout)-1:
                         if sum(i[1] for i in self.layout if i[1])+1<(sze[1]-3):
                             self.layout[self.focus[1]][1] += 1
-                            changed_now = True
+                            self._fixFocus()
                     elif self.focus[1] > 0 and self.layout[self.focus[1]-1][1] > 3:
                         self.layout[self.focus[1]-1][1] -= 1
-                        changed_now = True
+                        self._fixFocus()
                 elif ev == 'A':
                     if self.focus[0] < len(self.layout[self.focus[1]][0]) and self.layout[self.focus[1]][0][self.focus[0]] > 3:
                         self.layout[self.focus[1]][0][self.focus[0]] -= 1
-                        changed_now = True
+                        self._fixFocus()
                     elif self.focus[0] > 0:
                         w = sze[0]-sum(self.layout[self.focus[1]][0])
                         if w > 3:
                             self.layout[self.focus[1]][0][self.focus[0]-1] += 1
-                            changed_now = True
+                            self._fixFocus()
                 elif ev == 'D':
                     if self.focus[0] < len(self.layout[self.focus[1]][0]):
                         if sum(self.layout[self.focus[1]][0])+1<(sze[0]-3):
                             self.layout[self.focus[1]][0][self.focus[0]] += 1
-                            changed_now = True
+                            self._fixFocus()
                     elif self.focus[0] > 0 and self.layout[self.focus[1]][0][self.focus[0]-1] > 3:
                         self.layout[self.focus[1]][0][self.focus[0]-1] -= 1
-                        changed_now = True
-                
-                if changed_now:
-                    if self.focus[1] < 0:
-                        self.focus[1] = 0
-                    elif self.focus[1] >= len(self.layout):
-                        self.focus[1] = len(self.layout)-1
-                    
-                    if self.focus[0] < 0:
-                        self.focus[0] = 0
-                    elif self.focus[0] > len(self.layout[self.focus[1]][0]):
-                        self.focus[0] = len(self.layout[self.focus[1]][0])
+                        self._fixFocus()
         elif self.mode == ScreenModes.CHOOSE:
             self.chooseHold = None
             MAP = {
@@ -368,9 +385,6 @@ class TerminalAPI:
         if self.mode == ScreenModes.APPS:
             if self.fullscreen is not None:
                 self.fullscreen.draw()
-                for elm in self.allLoadedApps():
-                    if elm.DRAW_WHILE_FULL:
-                        elm.draw()
             else:
                 for elm in self.allLoadedApps():
                     elm.draw()
@@ -489,6 +503,24 @@ class TerminalAPI:
                 else:
                     self.Screen.Write(x1, y, '\033[7m', self.Screen.Get(x1, y))
                     self.Screen.Write(x2, y, f'\033[{extra}m{self.Screen.Get(x2, y)}\033[0m')
+        
+        if self.mode == ScreenModes.APPS:
+            hs = [i[1] for i in self.layout[:-1]]
+            hs += [sze[1]-sum(hs+[0])-1]
+            ws = self.layout[self.focus[1]][0].copy()
+            ws += [sze[0]-sum(ws+[0])]
+            y = 0
+            mny = sum(hs[:self.focus[1]]+[0])
+            mxy = sum(hs[:self.focus[1]+1]+[0])
+            for y in range(mny, mxy+1):
+                x1 = sum(ws[:self.focus[0]]+[0])
+                x2 = min(sum(ws[:self.focus[0]+1]+[0]), sze[0]-1)
+                if y == mny or y == mxy:
+                    self.Screen.Write(x1, y, '\033[7m', self.Screen.Get(x1, y))
+                    self.Screen.Write(x2, y, self.Screen.Get(x2, y), '\033[0m')
+                else:
+                    self.Screen.Write(x1, y, f'\033[7m{self.Screen.Get(x1, y)}\033[0m')
+                    self.Screen.Write(x2, y, f'\033[7m{self.Screen.Get(x2, y)}\033[0m')
     
     def print(self):
         self._print_borders()
@@ -716,17 +748,39 @@ class AppMeta(type):
         new_class._iid = niid
         if bases != (object,) and bases != ():
             cls.API.allApps.append(new_class)
+        
+        def nDel(self):
+            cls.usedIIDs.remove(self._iid)
+            if hasattr(new_class, '__del__'):
+                new_class.__del__(self)
+        new_class.__del__ = nDel
+
+        if not hasattr(new_class, 'FLAGS'):
+            new_class.FLAGS = []
+        
         return new_class
 
     def __str__(cls):
         return getattr(cls, 'NAME', super().__str__())
+    def __repr__(cls):
+        if not hasattr(cls, 'NAME'):
+            return super().__repr__()
+        return f'<App {cls.NAME}>'
+
+class AppFlags(IntEnum):
+    Background = 0
+    """This app still updates even when not the focus"""
+    RunWhileFull = 1
+    """The app still runs even when another app is in fullscreen"""
 
 class App(metaclass=AppMeta):
     NAME = 'DEFAULT APP'
+    FLAGS: list[AppFlags]
     API: TerminalAPI
     _iid: str
     def __init__(self, widgets=None):
         self.Screen = None
+        self.focus = False
         self.widgets: list[Widget] = ContainerWidgets(self, widgets or [])
     
     def __hash__(self):
@@ -775,11 +829,12 @@ class App(metaclass=AppMeta):
             if idx <= hei-2:
                 self.API.Screen.Write(x+1, y+idx+1, *ln[:wid-2])
 
-    def update(self):
+    def update(self, focus):
+        self.focus = focus
         for w in self.widgets:
             w.update()
     
     def __str__(self):
-        return self.NAME
+        return AppMeta.__str__(self.__class__)
     def __repr__(self):
-        return f'<App {self.NAME}>'
+        return AppMeta.__repr__(self.__class__)

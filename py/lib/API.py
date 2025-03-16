@@ -1,4 +1,3 @@
-from random import randint
 from enum import IntEnum
 import math
 import re
@@ -672,7 +671,7 @@ class Container:
         """Writes "".join(args) at (x, y)"""
         self._Screen.Write(x, y, *args)
 
-class ContainerWidgets(list):
+class WidgetContainer(list):
     def __init__(self, parent, startingList=None):
         self.parent = parent
         if startingList is not None:
@@ -688,7 +687,7 @@ class ContainerWidgets(list):
     
     def __getitem__(self, idx):
         if isinstance(idx, slice):
-            new = ContainerWidgets(self.parent)
+            new = WidgetContainer(self.parent)
             new += super().__getitem__(idx)
             return new
         return super().__getitem__(idx)
@@ -707,7 +706,14 @@ class WidgetMeta(type):
         return new_class
 
 class Widget(metaclass=WidgetMeta):
-    parent: Container
+    parent: 'App'
+
+    @property
+    def _idx(self):
+        return self.parent.widgets.index(self)
+
+    def __hash__(self):
+        return id(self)
     
     def __del__(self):
         if self in self.parent.widgets:
@@ -739,18 +745,20 @@ class PositionedWidget(Widget):
         self._pos = pos
     
     def pos(self):
-        return self._pos((self.width, self.height), self.API.get_terminal_size())
+        return self._pos((self.width, self.height), self.parent.Size())
     
     def realPos(self):
-        x, y = self._pos((self.width, self.height), self.API.get_terminal_size())
-        return x+self.parent.x, y+self.parent.y
+        pos = self.parent._gridPos()
+        parPos = self.parent.Pos(pos)
+        x, y = self._pos((self.width, self.height), self.parent.Size(pos))
+        return x+parPos[0], y+parPos[1]
 
 class Popup(Container):
     DRAW_WHILE_FULL = True
     
     def __init__(self, *widgets, duration=3, max_width=None):
         self.max_width = max_width
-        self.widgets = ContainerWidgets(self, widgets)
+        self.widgets = WidgetContainer(self, widgets)
         self.Screen = Screen()
         self.duration = duration
         self.start_time = time.time()
@@ -786,22 +794,14 @@ class Popup(Container):
 
 class AppMeta(type):
     API = TerminalAPI()
-    usedIIDs = {None}
     def __new__(cls, name, bases, class_dict):
         new_class = super().__new__(cls, name, bases, class_dict)
         new_class.API = cls.API
-        niid = None
-        while niid in cls.usedIIDs:
-            niid = randint(0, 2147483646)
-        cls.usedIIDs.add(niid)
-        new_class._iid = niid
         if bases != (object,) and bases != ():
             cls.API.allApps.append(new_class)
         
         def nDel(self):
-            cls.usedIIDs.remove(self._iid)
-            if hasattr(new_class, '__del__'):
-                new_class.__del__(self)
+            getattr(new_class, '__del__', cls.__del__)(self)
         new_class.__del__ = nDel
 
         if not hasattr(new_class, 'FLAGS'):
@@ -826,14 +826,14 @@ class App(metaclass=AppMeta):
     NAME = 'DEFAULT APP'
     FLAGS: list[AppFlags]
     API: TerminalAPI
-    _iid: str
     def __init__(self, widgets=None):
         self.Screen = None
         self.focus = False
-        self.widgets: list[Widget] = ContainerWidgets(self, widgets or [])
+        self.focusElm = 0
+        self.widgets: list[Widget] = WidgetContainer(self, widgets or [])
     
     def __hash__(self):
-        return self._iid
+        return id(self)
     
     def _gridPos(self):
         for yidx, row in enumerate(self.API.grid):

@@ -78,7 +78,7 @@ class Button(Text):
     def update(self, focus):
         self.pressing = False
         for ev in self.API.events:
-            if ev == 'ENTER' or ev == 'SPACE':
+            if focus and ev == 'ENTER' or ev == 'SPACE':
                 if ev.state == 0:
                     self.callback()
                 else:

@@ -134,6 +134,7 @@ class TerminalAPI:
         self.layout = [[[], None]]
         self.chooseHold = None
         self.grid = [[None]]
+        self.extras = []
         self.selected = None
         self.searching = ''
         self.searchTxts = {}
@@ -186,13 +187,15 @@ class TerminalAPI:
                 for elm in self.allLoadedApps():
                     if elm is not None and elm is not self.fullscreen and AppFlags.RunWhileFull in elm.FLAGS:
                         elm.update(False)
-                return
-            focusApp = self.grid[self.focus[1]][self.focus[0]]
-            if focusApp is not None:
-                focusApp.update(True)
-            for elm in self.allLoadedApps():
-                if elm is not None and elm is not focusApp and AppFlags.Background in elm.FLAGS:
-                    elm.update(False)
+            else:
+                focusApp = self.grid[self.focus[1]][self.focus[0]]
+                if focusApp is not None:
+                    focusApp.update(True)
+                for elm in self.allLoadedApps():
+                    if elm is not None and elm is not focusApp and AppFlags.Background in elm.FLAGS:
+                        elm.update(False)
+            for elm in self.extras:
+                elm.update()
         elif self.mode == ScreenModes.LAYOUT:
             sze = self.get_terminal_size()
             for ev in self.events:
@@ -412,7 +415,7 @@ class TerminalAPI:
                 self._search()
 
     def _search(self):
-        txt = self.searching.replace('⓿', '')
+        # txt = self.searching.replace('⓿', '')
         results = self.allApps
         self.searchTxts = {}
         for idx, res in enumerate(results[:4]): # First picks get edges
@@ -573,6 +576,9 @@ class TerminalAPI:
     
     def print(self):
         self._print_borders()
+        if self.mode == ScreenModes.APPS:
+            for elm in self.extras:
+                elm.draw()
         winSize = self.get_terminal_size()
         for y, oldrow in self._oldScreen.screen.items():
             if y < 0 or y > winSize[1]-1:
@@ -593,6 +599,9 @@ class TerminalAPI:
     
     def printAll(self):
         self._print_borders()
+        if self.mode == ScreenModes.APPS:
+            for elm in self.extras:
+                elm.draw()
         winSize = self.get_terminal_size()
         for y in range(winSize[1]):
             if y in self.Screen.screen:
@@ -632,67 +641,6 @@ class RelativePos(Position):
                 out.append(round((winSze[i]-size[i]-2)*self.weight[i]))
         return out
 
-class Container:
-    DRAW_WHILE_FULL = False
-    
-    API = TerminalAPI()
-
-    def __new__(cls, *args, **kwargs):
-        elm = super().__new__(cls)
-        cls.API.elms.append(elm)
-        return elm
-
-    def __del__(self):
-        if self.isFullscreen:
-            self.unfullscreen()
-        if self in self.API.elms:
-            self.API.elms.remove(self)
-    
-    def draw(self):
-        pass
-
-    def update(self):
-        return False
-
-    def fullscreen(self):
-        self.API.fullscreen = self
-    
-    def unfullscreen(self):
-        self.API.fullscreen = None
-    
-    @property
-    def isFullscreen(self):
-        return self.API.fullscreen == self
-
-    @property
-    def _Screen(self) -> Screen:
-        return self.API.Screen
-    
-    def _Write(self, x, y, *args):
-        """Writes "".join(args) at (x, y)"""
-        self._Screen.Write(x, y, *args)
-
-class WidgetContainer(list):
-    def __init__(self, parent, startingList=None):
-        self.parent = parent
-        if startingList is not None:
-            super().__init__([i(self.parent) for i in startingList])
-        else:
-            super().__init__()
-    
-    def append(self, elm):
-        super().append(elm(self.parent))
-    
-    def extend(self, elms):
-        super().extend([i(self.parent) for i in elms])
-    
-    def __getitem__(self, idx):
-        if isinstance(idx, slice):
-            new = WidgetContainer(self.parent)
-            new += super().__getitem__(idx)
-            return new
-        return super().__getitem__(idx)
-
 class WidgetMeta(type):
     def __new__(cls, name, bases, class_dict):
         new_class = super().__new__(cls, name, bases, class_dict)
@@ -707,7 +655,7 @@ class WidgetMeta(type):
         return new_class
 
 class Widget(metaclass=WidgetMeta):
-    parent: 'App'   
+    parent: 'Container'
     
     def __del__(self):
         if self in self.parent.widgets:
@@ -740,15 +688,44 @@ class PositionedWidget(Widget):
     
     def pos(self):
         return self._pos((self.width, self.height), self.parent.Size())
+
+class WidgetContainer(list):
+    def __init__(self, parent, startingList=None):
+        self.parent = parent
+        if startingList is not None:
+            super().__init__([i(self.parent) for i in startingList])
+        else:
+            super().__init__()
     
-    def realPos(self):
-        pos = self.parent._gridPos()
-        parPos = self.parent.Pos(pos)
-        x, y = self._pos((self.width, self.height), self.parent.Size(pos))
-        return x+parPos[0], y+parPos[1]
+    def append(self, elm):
+        super().append(elm(self.parent))
+    
+    def extend(self, elms):
+        super().extend([i(self.parent) for i in elms])
+    
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            new = WidgetContainer(self.parent)
+            new += super().__getitem__(idx)
+            return new
+        return super().__getitem__(idx)
+
+class Container:
+    API = TerminalAPI()
+    Screen: Screen
+
+    def Size(self):
+        return 0, 0
 
 class Popup(Container):
-    DRAW_WHILE_FULL = True
+    def __new__(cls, *args, **kwargs):
+        inst = super().__new__(cls)
+        cls.API.extras.append(inst)
+        return inst
+    
+    def __del__(self):
+        if self in self.API.extras:
+            self.API.extras.remove(self)
     
     def __init__(self, *widgets, duration=3, max_width=None):
         self.max_width = max_width
@@ -756,43 +733,37 @@ class Popup(Container):
         self.Screen = Screen()
         self.duration = duration
         self.start_time = time.time()
-        self.x, self.y = None, None
+        self.width, self.height = 0, 0
+    
+    def Size(self):
+        return self.width, self.height
     
     def draw(self):
         self.Screen.Clear()
         for widget in self.widgets:
-            widget.draw()
+            widget.draw(False)
         
         lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
         for idx, line in self.Screen.screen.items():
             lines[idx] = str(line)
 
         cols, rows = self.API.get_terminal_size()
-        self.x, self.y = cols - max(strLen(i) for i in lines) - 2, rows - len(lines) - 2
-        width, height = max(strLen(i) for i in (lines or [''])), len(lines)
-        self._Write(self.x, self.y, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
+        x, y = cols - max(strLen(i) for i in lines) - 2, rows - len(lines) - 2
+        self.width, self.height = max(strLen(i) for i in (lines or [''])), len(lines)
+        self.API.Screen.Write(x, y, '\033[100;34;1m│\033[39m', ' '*self.width, ' \033[0m')
         for idx, ln in enumerate(lines):
-            self._Write(self.x, self.y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(width-len(ln))}\033[0m')
-        self._Write(self.x, self.y+height+1, '\033[100;34;1m│\033[39m', ' '*width, ' \033[0m')
+            self.API.Screen.Write(x, y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(self.width-len(ln))}\033[0m')
+        self.API.Screen.Write(x, y+self.height+1, '\033[100;34;1m│\033[39m', ' '*self.width, ' \033[0m')
     
     def update(self):
-        if self.API.LMBP and self.x is not None and self.y is not None:
-            mouse = self.API.Mouse
-            if self.x <= mouse[0] and self.y <= mouse[1]:
-                self.__del__()
-                return True
         if time.time() - self.start_time > self.duration:
             self.__del__()
-            return True
-        return super().update()
 
 class AppMeta(type):
-    API = TerminalAPI()
     def __new__(cls, name, bases, class_dict):
         new_class = super().__new__(cls, name, bases, class_dict)
-        new_class.API = cls.API
-        if bases != (object,) and bases != ():
-            cls.API.allApps.append(new_class)
+        if bases != (Container,) and bases != ():
+            new_class.API.allApps.append(new_class)
         
         def nDel(self):
             getattr(new_class, '__del__', cls.__del__)(self)
@@ -816,15 +787,14 @@ class AppFlags(IntEnum):
     RunWhileFull = 1
     """The app still runs even when another app is in fullscreen"""
 
-class App(metaclass=AppMeta):
+class App(Container, metaclass=AppMeta):
     NAME = 'DEFAULT APP'
     FLAGS: list[AppFlags]
-    API: TerminalAPI
     def __init__(self, widgets=None):
         self.Screen = None
         self.focus = False
         self.focusElm = 0
-        self.widgets: list[Widget] = WidgetContainer(self, widgets or [])
+        self.widgets = WidgetContainer(self, widgets or [])
     
     def _gridPos(self):
         for yidx, row in enumerate(self.API.grid):

@@ -1,3 +1,4 @@
+from lib.IO import Key
 from enum import IntEnum
 import math
 import re
@@ -126,7 +127,7 @@ class TerminalAPI:
         if hasattr(self, '_initialized'):
             return
         self._initialized = True
-        self.events = []
+        self.events: list[Key] = []
         self.allApps = []
         self.fullscreen = None
         self.focus = [0, 0]
@@ -564,11 +565,11 @@ class TerminalAPI:
                 x1 = sum(ws[:self.focus[0]]+[0])
                 x2 = min(sum(ws[:self.focus[0]+1]+[0]), sze[0]-1)
                 if y == mny or y == mxy:
-                    self.Screen.Write(x1, y, '\033[7m', self.Screen.Get(x1, y))
+                    self.Screen.Write(x1, y, '\033[46;30m', self.Screen.Get(x1, y))
                     self.Screen.Write(x2, y, self.Screen.Get(x2, y), '\033[0m')
                 else:
-                    self.Screen.Write(x1, y, f'\033[7m{self.Screen.Get(x1, y)}\033[0m')
-                    self.Screen.Write(x2, y, f'\033[7m{self.Screen.Get(x2, y)}\033[0m')
+                    self.Screen.Write(x1, y, f'\033[46;30m{self.Screen.Get(x1, y)}\033[0m')
+                    self.Screen.Write(x2, y, f'\033[46;30m{self.Screen.Get(x2, y)}\033[0m')
     
     def print(self):
         self._print_borders()
@@ -706,14 +707,7 @@ class WidgetMeta(type):
         return new_class
 
 class Widget(metaclass=WidgetMeta):
-    parent: 'App'
-
-    @property
-    def _idx(self):
-        return self.parent.widgets.index(self)
-
-    def __hash__(self):
-        return id(self)
+    parent: 'App'   
     
     def __del__(self):
         if self in self.parent.widgets:
@@ -723,10 +717,10 @@ class Widget(metaclass=WidgetMeta):
     def API(self):
         return self.parent.API
     
-    def draw(self):
+    def draw(self, focus):
         pass
 
-    def update(self):
+    def update(self, focus):
         pass
     
     @property
@@ -832,9 +826,6 @@ class App(metaclass=AppMeta):
         self.focusElm = 0
         self.widgets: list[Widget] = WidgetContainer(self, widgets or [])
     
-    def __hash__(self):
-        return id(self)
-    
     def _gridPos(self):
         for yidx, row in enumerate(self.API.grid):
             if self in row:
@@ -868,8 +859,8 @@ class App(metaclass=AppMeta):
     
     def draw(self):
         self.Screen = Screen()
-        for w in self.widgets:
-            w.draw()
+        for idx, w in enumerate(self.widgets):
+            w.draw(self.focusElm == idx)
         
         gridP = self._gridPos()
         x, y = self.Pos(gridP)
@@ -880,8 +871,15 @@ class App(metaclass=AppMeta):
 
     def update(self, focus):
         self.focus = focus
-        for w in self.widgets:
-            w.update()
+        if self.focus:
+            for ev in self.API.events:
+                if ev.state == 1:
+                    if ev == 'RIGHT' or ev == 'TAB':
+                        self.focusElm = min(self.focusElm+1, len(self.widgets)-1)
+                    elif ev == 'LEFT' or ev == 'shift+TAB':
+                        self.focusElm = max(self.focusElm-1, 0)
+        for idx, w in enumerate(self.widgets):
+            w.update(self.focusElm == idx)
     
     def __str__(self):
         return AppMeta.__str__(self.__class__)

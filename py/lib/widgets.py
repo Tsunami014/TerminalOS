@@ -40,7 +40,7 @@ class Text(PositionedWidget):
         self.text = text
         self.max_width = max_width
     
-    def draw(self):
+    def draw(self, focus):
         lines = findLines(self.text, self.max_width)
         
         self.width, self.height = max(strLen(i) for i in lines), len(lines)
@@ -48,43 +48,41 @@ class Text(PositionedWidget):
         x, y = self.pos()
         
         for idx, line in enumerate(lines):
+            if focus:
+                line = f'\033[7m{line}\033[27m'
             self._Write(x, y+idx, line)
 
 class Button(Text):
     def __init__(self, pos, text, callback, max_width=None):
         super().__init__(pos, text, max_width)
         self.callback = callback
+        self.pressing = False
     
-    @property
-    def isHovering(self):
-        rp = self.realPos()
-        return self.API.Mouse[0] > rp[0] and self.API.Mouse[0] <= rp[0]+self.width and \
-               self.API.Mouse[1] > rp[1] and self.API.Mouse[1] <= rp[1]+self.height
-    
-    def draw(self):
+    def draw(self, focus):
         lines = findLines(self.text, self.max_width)
-        
         self.width, self.height = max(strLen(i) for i in lines)+2, len(lines)+1
 
-        if self.isHovering:
-            lines = [f'\033[45m {i}{" "*(self.width-strLen(i)-1)}\033[49m' for i in lines] + ['\033[45m'+'_'*self.width+'\033[49m']
+        if self.pressing:
+            col = '43'
+        elif focus:
+            col = '45'
         else:
-            lines = [f'\033[44m {i}{" "*(self.width-strLen(i)-1)}\033[49m' for i in lines] + ['\033[44m'+'_'*self.width+'\033[49m']
-        # The linux vt doesn't support advanced colours :'(
-        # if self.isHovering:
-        #     lines = [f'\033[38;5;250;48;5;237m {i} \033[39;49m' for i in lines] + ['\033[48;5;237;38;5;246m'+'_'*self.width+'\033[39;49m']
-        # lines = [f'\033[100m {i} \033[49m' for i in lines] + ['\033[100;38;5;250m'+'_'*self.width+'\033[39;49m']
+            col = '44'
+        
+        lines = [f'\033[{col}m {i}{" "*(self.width-strLen(i)-1)}\033[49m' for i in lines] + [f'\033[{col}m'+'_'*self.width+'\033[49m']
 
         x, y = self.pos()
-        
         for idx, line in enumerate(lines):
             self._Write(x, y+idx, line)
     
-    def update(self):
-        if self.isHovering and self.API.LMBP:
-            self.callback()
-            return True
-        return False
+    def update(self, focus):
+        self.pressing = False
+        for ev in self.API.events:
+            if ev == 'ENTER' or ev == 'SPACE':
+                if ev.state == 0:
+                    self.callback()
+                else:
+                    self.pressing = True
 
 class TextInput(PositionedWidget):
     def __init__(self, pos, max_width=None, max_height=None, placeholder='', start=''):

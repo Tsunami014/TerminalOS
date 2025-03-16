@@ -27,7 +27,7 @@ def loadExternals():
 class Help(App):
     NAME = 'Help'
     def __init__(self):
-        super().__init__([wids.Text(RelativePos(0.5, 0), 'HELP')])
+        super().__init__([wids.Text(RelativePos(0.5, 0), 'HELP'), wids.Button(RelativePos(0.5, 0, force_y=1), 'Hello', lambda: None)])
 
 class SoftwareManager(App):
     NAME = 'Software Manager'

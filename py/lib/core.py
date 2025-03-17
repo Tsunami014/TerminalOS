@@ -29,7 +29,8 @@ class Help(App):
     def __init__(self):
         super().__init__([
             wids.Text(RelativePos(0.5, 0), 'HELP'), 
-            wids.Button(RelativePos(0.5, 0, force_y=1), 'Hello', lambda: Popup(wids.Text(StaticPos(0, 0), 'You pressed\nthe button!')))
+            wids.Button(RelativePos(0.5, 0, force_y=1), 'Hello', lambda: Popup(wids.Text(StaticPos(0, 0), 'You pressed\nthe button!'))),
+            wids.TextInput(RelativePos(0.5, 0, force_y=3), 50)
         ])
 
 class SoftwareManager(App):

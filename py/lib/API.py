@@ -841,13 +841,20 @@ class App(Container, metaclass=AppMeta):
 
     def update(self, focus):
         self.focus = focus
+        changed = False
         if self.focus:
             for ev in self.API.events:
                 if ev.state == 1:
-                    if ev == 'RIGHT' or ev == 'TAB':
+                    if ev == 'ctrl+RIGHT' or ev == 'TAB':
                         self.focusElm = min(self.focusElm+1, len(self.widgets)-1)
-                    elif ev == 'LEFT' or ev == 'shift+TAB':
+                        changed = True
+                    elif ev == 'ctrl+LEFT' or ev == 'shift+TAB':
                         self.focusElm = max(self.focusElm-1, 0)
+                        changed = True
+        if changed:
+            for ev in self.API.events:
+                ev.heldFrames = 0
+                ev.startHoldTime = time.time()
         for idx, w in enumerate(self.widgets):
             w.update(self.focusElm == idx)
     

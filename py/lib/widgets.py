@@ -1,5 +1,5 @@
 from lib.API import PositionedWidget, Clipboard, strLen, split
-from string import printable
+import math
 import time
 
 __all__ = [
@@ -85,181 +85,130 @@ class Button(Text):
                     self.pressing = True
 
 class TextInput(PositionedWidget):
-    def __init__(self, pos, max_width=None, max_height=None, placeholder='', start=''):
+    FILLER = '⓿'
+    def __init__(self, 
+                 pos, 
+                 max_width=None, 
+                 max_height=None, 
+                 show_lines=True, 
+                 multiline=True, 
+                 onenter=None, 
+                 weight_lr=0.5, 
+                 placeholder='', 
+                 start=''
+        ):
         super().__init__(pos)
         self.max_width = max_width
         self.max_height = max_height
+        self.show_lines = show_lines
         self.placeholder = placeholder
+        self.weight = weight_lr
+        self.multiline = multiline
+        self.onenter = onenter
         self.text = start
         self.cursor = None
         self.width, self.height = 0, 0
     
-    def draw(self):
-        if self.text == '':
+    def draw(self, focus):
+        txt = self.text
+        if not focus:
+            txt = txt.replace(self.FILLER, '')
+        if txt == '':
             if self.placeholder != '':
                 lines = findLines(self.placeholder, self.max_width)
                 lines = [f'\033[90m{i}\033[39m' for i in lines]
             else:
-                if self.max_width is not None:
-                    lines = [' '*self.max_width]
-                else:
-                    lines = ['']
+                lines = ['']
         else:
-            lines = findLines(self.text, self.max_width)
-        self.width = max(strLen(i) for i in lines)+1
-        lines = [f'\033[4m{i + ' '*(self.width-strLen(i))}\033[24m' for i in lines]
-        
-        self.height = len(lines)
-        if self.max_height:
-            self.height = min(self.height, self.max_height)
+            lines = findLines(txt, self.max_width)
+        if self.show_lines and self.max_width is not None:
+            # '\033[90m_\033[0m'
+            nlines = lines[:self.max_height]
+            if self.max_height is not None:
+                nlines += ['' for _ in range(self.max_height-len(nlines))]
+            for idx, ln in enumerate(nlines):
+                lnt = ln[:self.max_width]
+                tlen = round((self.max_width-strLen(lnt))*self.weight)
+                nlines[idx] = ('_'*tlen+lnt+'_'*tlen+'_')[:self.max_width]
+        else:
+            ml = max(strLen(i) for i in lines)
+            if self.max_height is not None:
+                nlines = []
 
+                for ln in range(self.max_height):
+                    lnt = (lines[ln] if ln < len(lines) else '_')
+                    midx = round((ml-strLen(lnt)) * self.weight)
+
+                    nlines.append(' '*midx+lnt+' '*(ml - midx - strLen(lnt)))
+            else:
+                nlines = []
+                for ln in lines:
+                    midx = round((ml-strLen(ln)) * self.weight)
+                    nlines.append(' '*midx+ln+(ml - midx - strLen(ln)))
+            
+        self.width = max(strLen(i) for i in nlines)
+        self.height = len(nlines)
         x, y = self.pos()
-        
-        for idx, line in enumerate(lines[:self.height]):
-            self._Write(x, y+idx, line)
-        
-        if self.cursor is not None:
-            if self.text == '' and self.placeholder != '':
-                newchar = '\033[39m|\033[90m'
-            else:
-                newchar = '|'
-            self.fix_cursor(lines)
-            chars = split(self._Screen.Get(x+self.cursor[0], y+self.cursor[1]))
-            if round(time.time()*3)%3 != 0:
-                for idx in range(len(chars)):
-                    if chars[idx][0] != '\033':
-                        chars[idx] = newchar
-                        break
-                else:
-                    chars = [newchar]+chars
-            else:
-                if all(i[0] == '\033' for i in chars):
-                    chars = [' ']+chars
-            self._Write(x+self.cursor[0], y+self.cursor[1], *chars)
+        tme = math.floor(time.time()%1.5)
+        for idx, ln in enumerate(nlines):
+            self._Write(x, y+idx, ln.replace(self.FILLER, ['\033[7m_\033[27m', ' '][tme]))
     
-    def fix_cursor(self, lines=None, justCapX=False):
-        if self.text == '':
-            self.cursor = [0, 0]
-            return
-        if lines is None:
-            lines = findLines(self.text, self.max_width)
-        self.cursor = list(self.cursor)
-        max_hei = min(len(lines)-1, self.max_height) if self.max_height is not None else (len(lines)-1)
-        self.cursor[1] = min(max(self.cursor[1], 0), max_hei)
-        if justCapX:
-            self.cursor[0] = min(max(self.cursor[0], 0), len(lines[self.cursor[1]]))
-        else:
-            if self.cursor[0] < 0:
-                self.cursor[1] -= 1
-                if self.cursor[1] < 0:
-                    self.cursor[1] = 0
-                    self.cursor[0] = 0
-                else:
-                    self.cursor[0] = len(lines[self.cursor[1]])
-            if self.cursor[0] > len(lines[self.cursor[1]]):
-                self.cursor[1] += 1
-                if self.cursor[1] > max_hei:
-                    self.cursor[1] = max_hei
-                    self.cursor[0] = len(lines[self.cursor[1]])
-                else:
-                    self.cursor[0] = 0
-    
-    @property
-    def isHovering(self):
-        rp = self.realPos()
-        return self.API.Mouse[0] > rp[0] and self.API.Mouse[0] <= rp[0]+self.width+1 and \
-               self.API.Mouse[1] > rp[1] and self.API.Mouse[1] <= rp[1]+self.height
-    
-    @property
-    def cursorIdx(self):
-        if self.max_width:
-            idx = 0
-            y = 0
-            for paragraph in self.text.split('\n'):
-                while strLen(paragraph) > self.max_width:
-                    space_index = paragraph.rfind(' ', 0, self.max_width)
-                    if space_index == -1:
-                        space_index = self.max_width
-                    idx += space_index
-                    y += 1
-                    if y >= self.cursor[1]:
-                        break
-                    paragraph = paragraph[space_index:].lstrip()
-                if y >= self.cursor[1]:
-                    break
-                idx += len(paragraph) + 1
-                y += 1
-                if y >= self.cursor[1]:
-                    break
-            idx += self.cursor[0]
-        else:
-            idx = len("".join(self.text.split('\n')[:self.cursor[1]]))+self.cursor[1]+self.cursor[0]
-        return idx
-    
-    def update(self):
-        if self.API.LMBP:
-            if self.isHovering:
-                rp = self.realPos()
-                mp = self.API.Mouse
-                self.cursor = mp[0]-rp[0]-1, mp[1]-rp[1]-1
-                self.fix_cursor(justCapX=True)
-                return True
-            else:
-                self.cursor = None
-        if self.cursor is not None:
-            if self.API.events:
-                for char in self.API.events:
-                    did_something = False
-                    if char in printable:
-                        # A printable character
-                        did_something = True
-                        if char == '\r':
-                            char = '\n'
-                        if char == '\t':
-                            self.API.events.extend([' ' for _ in range(4)])
-                            continue
-                        idx = self.cursorIdx
-                        if char == '\n':
-                            lines = findLines(self.text, self.max_width)
-                            if self.max_height is not None and len(lines)+1 > self.max_height:
-                                did_something = False
-                                continue
-                            self.cursor[1] += 1
-                            self.cursor[0] = 0
+    def update(self, focus):
+        if self.FILLER not in self.text:
+            self.text += self.FILLER
+        for ev in self.API.events:
+            if focus:
+                change_now = False
+                if ev.state == 1:
+                    if ev == 'UP':
+                        if self.max_width is None:
+                            self.text = self.FILLER+self.text.replace(self.FILLER, '')
                         else:
-                            self.cursor[0] += 1
-                        self.text = self.text[:idx] + char + self.text[idx:]
-                    elif char == '\x7f': # Backspace
-                        did_something = True
-                        idx = self.cursorIdx
-                        if idx != 0:
-                            self.text = self.text[:idx-1] + self.text[idx:]
-                            self.cursor[0] -= 1
-                            self.fix_cursor()
-                    elif char == '\x16': # Ctrl+V
-                        did_something = True
-                        self.API.events.extend(list(Clipboard.read()))
-                    elif char[:2] == '\x1b[':
-                        # An escape sequence
-                        if char[2] == 'A':
-                            # Up
-                            did_something = True
-                            self.cursor[1] -= 1
-                        elif char[2] == 'B':
-                            # Down
-                            did_something = True
-                            self.cursor[1] += 1
-                        elif char[2] == 'C':
-                            # Right
-                            did_something = True
-                            self.cursor[0] += 1
-                        elif char[2] == 'D':
-                            # Left
-                            did_something = True
-                            self.cursor[0] -= 1
-
-                    if did_something:
-                        self.fix_cursor()
-
-            return True
-        return False
+                            self.text = self.text[:max(self.text.index(self.FILLER)-self.max_width, 0)].replace(self.FILLER, '')+\
+                                             self.FILLER+\
+                                             self.text[max(self.text.index(self.FILLER)-self.max_width, 0):].replace(self.FILLER, '')
+                    elif ev == 'DOWN':
+                        if self.max_width is None:
+                            self.text = self.text.replace(self.FILLER, '')+self.FILLER
+                        else:
+                            self.text = self.text[:self.text.index(self.FILLER)+self.max_width+1].replace(self.FILLER, '')+\
+                                             self.FILLER+\
+                                             self.text[self.text.index(self.FILLER)+self.max_width+1:].replace(self.FILLER, '')
+                    elif ev == 'LEFT':
+                        self.text = self.text[:max(self.text.index(self.FILLER)-1, 0)].replace(self.FILLER, '')+\
+                                         self.FILLER+\
+                                         self.text[max(self.text.index(self.FILLER)-1, 0):].replace(self.FILLER, '')
+                    elif ev == 'RIGHT':
+                        self.text = self.text[:self.text.index(self.FILLER)+2].replace(self.FILLER, '')+\
+                                         self.FILLER+\
+                                         self.text[self.text.index(self.FILLER)+2:].replace(self.FILLER, '')
+                if ev.state == 1 or (ev.heldFor > 0.8 and ev.heldFrames % 4 == 0):
+                    if ev == 'BACKSPACE':
+                        self.text = self.text[:self.text.index(self.FILLER)-1].replace(self.FILLER, '')+\
+                                         self.FILLER+\
+                                         self.text[self.text.index(self.FILLER)+1:].replace(self.FILLER, '')
+                        change_now = True
+                    elif ev == 'DELETE':
+                        self.text = self.text[:self.text.index(self.FILLER)].replace(self.FILLER, '')+\
+                                         self.FILLER+\
+                                         self.text[self.text.index(self.FILLER)+2:].replace(self.FILLER, '')
+                        change_now = True
+                    elif ev == 'ENTER':
+                        if self.multiline:
+                            self.text = self.text[:self.text.index(self.FILLER)].replace(self.FILLER, '')+\
+                                             '\n'+\
+                                             self.FILLER+\
+                                             self.text[self.text.index(self.FILLER)+1:].replace(self.FILLER, '')
+                        if self.onenter is not None:
+                            self.onenter()
+                    elif ev.unicode is not None:
+                        self.text = self.text[:self.text.index(self.FILLER)].replace(self.FILLER, '')+\
+                                         ev.unicode+\
+                                         self.FILLER+\
+                                         self.text[self.text.index(self.FILLER)+1:].replace(self.FILLER, '')
+                        change_now = True
+                if change_now:
+                    if self.FILLER not in self.text:
+                        self.text = self.text + self.FILLER
+                    if self.max_width is not None and self.max_height is not None:
+                        self.text = self.text[:self.max_width*self.max_height+1]

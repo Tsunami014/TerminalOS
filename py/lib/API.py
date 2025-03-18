@@ -162,6 +162,12 @@ class TerminalAPI:
             self.focus[0] = 0
         elif self.focus[0] > len(self.layout[self.focus[1]][0]):
             self.focus[0] = len(self.layout[self.focus[1]][0])
+    
+    def screenUpdate(self):
+        for elm in self.allLoadedApps():
+            elm.onScreenUpdate()
+        for elm in self.extras:
+            elm.onScreenUpdate()
 
     def updateAll(self):
         if self.mode == ScreenModes.APPS:
@@ -201,6 +207,7 @@ class TerminalAPI:
             for ev in self.events:
                 if ev.state == 1:
                     if ev == 'ESC':
+                        self.screenUpdate()
                         self.mode = ScreenModes.APPS
                     
                     # Creation - ctrl+<>
@@ -762,7 +769,7 @@ class Popup(Container):
 class AppMeta(type):
     def __new__(cls, name, bases, class_dict):
         new_class = super().__new__(cls, name, bases, class_dict)
-        if bases != (Container,) and bases != ():
+        if new_class.ADD_TO_LIST:
             new_class.API.allApps.append(new_class)
         
         def nDel(self):
@@ -788,6 +795,7 @@ class AppFlags(IntEnum):
     """The app still runs even when another app is in fullscreen"""
 
 class App(Container, metaclass=AppMeta):
+    ADD_TO_LIST = False
     NAME = 'DEFAULT APP'
     FLAGS: list[AppFlags]
     def __init__(self, widgets=None):
@@ -826,6 +834,9 @@ class App(Container, metaclass=AppMeta):
         else:
             y, x = gridP
         return sum(self.API.layout[y][0][:x] or [0]), sum([i[1] for i in self.API.layout[:y]] or [0])
+
+    def onScreenUpdate(self):
+        pass
     
     def draw(self):
         self.Screen = Screen()

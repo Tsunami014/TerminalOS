@@ -1,6 +1,16 @@
 from lib.API import PositionedWidget, Clipboard, strLen, split
+from multiprocessing import Process
 import math
 import time
+import pyte
+import os
+import pty
+import select
+import fcntl
+import struct
+import termios
+import signal
+import sys
 
 __all__ = [
     'Text', 
@@ -212,3 +222,79 @@ class TextInput(PositionedWidget):
                         self.text = self.text + self.FILLER
                     if self.max_width is not None and self.max_height is not None:
                         self.text = self.text[:self.max_width*self.max_height+1]
+
+# TODO: Make faster, allow access to colours
+class Terminal(PositionedWidget):
+    def __init__(self, pos, cmd, width=50, height=10):
+        self.height = height
+        self.width = width
+        self.cmd = cmd
+
+        self.screen = pyte.Screen(width, height)
+        self.stream = pyte.Stream(self.screen)
+        
+        self.master_fd = None
+        self.child_pid = None
+        self.orig_stdin_attrs = None
+    
+        super().__init__(pos)
+        self.start()
+
+    def start(self):
+        """Start the virtual terminal."""
+        # Create pseudo-terminal
+        self.master_fd, slave_fd = pty.openpty()
+        winsize = struct.pack("HHHH", self.height, self.width, 0, 0)
+        fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
+        
+        # Fork a child process to run the shell
+        pid = os.fork()
+        if pid == 0:
+            # Child process: create new session, connect stdio to slave_fd, and exec the shell.
+            os.setsid()
+            os.dup2(slave_fd, 0)  # stdin
+            os.dup2(slave_fd, 1)  # stdout
+            os.dup2(slave_fd, 2)  # stderr
+            os.close(self.master_fd)
+            os.execlp(self.cmd, self.cmd, "-i")
+        else:
+            # Parent process: close slave_fd, save child pid.
+            self.child_pid = pid
+            os.close(slave_fd)
+    
+    def resize(self, width, height):
+        if self.width == width or self.height == height:
+            return
+        winsize = struct.pack("HHHH", height, width, 0, 0)
+        fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, winsize)
+        os.kill(self.child_pid, signal.SIGWINCH)
+        self.screen.resize(height, width)
+        self.height = height
+        self.width = width
+
+    def update(self, focus):
+        ls = [self.master_fd]
+        if focus:
+            ls.append(sys.stdin.fileno())
+        rlist, _, _ = select.select(ls, [], [], 0.1)
+        for fd in rlist:
+            if fd == self.master_fd:
+                # Read data from the pseudo-terminal.
+                try:
+                    data = os.read(self.master_fd, 1024)
+                except OSError:
+                    return
+                if not data:
+                    return
+                # Feed the data to pyte to update the virtual screen.
+                self.stream.feed(data.decode('utf-8', errors='ignore'))
+            elif fd == sys.stdin.fileno():
+                # Read key input from stdin.
+                key_data = os.read(sys.stdin.fileno(), 1024)
+                if key_data:
+                    os.write(self.master_fd, key_data)
+    
+    def draw(self, focus):
+        x, y = self.pos()
+        for idx, ln in enumerate(self.screen.display):
+            self._Write(x, y+idx, ln)

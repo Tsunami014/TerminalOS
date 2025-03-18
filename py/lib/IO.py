@@ -1,5 +1,4 @@
 from evdev import InputDevice, list_devices, categorize, ecodes
-from queue import Empty
 import time
 from multiprocessing import Process, Pipe
 
@@ -155,13 +154,10 @@ class KbdInp:
                 self.events.pop(ev)
             elif self.events[ev].state == 1:
                 self.events[ev].state = 2
-        try:
-            while self.pipe.poll():
-                nev = self.pipe.recv()
-                if nev.scancode in self.events and nev == self.events[nev.scancode]:
-                    nev.startHoldTime = self.events[nev.scancode].startHoldTime
-                    nev.heldFrames = self.events[nev.scancode].heldFrames + 1
-                self.events[nev.scancode] = nev
-        except Empty:
-            pass
+        while self.pipe.poll():
+            nev = self.pipe.recv()
+            if nev.scancode in self.events and nev == self.events[nev.scancode]:
+                nev.startHoldTime = self.events[nev.scancode].startHoldTime
+                nev.heldFrames = self.events[nev.scancode].heldFrames + 1
+            self.events[nev.scancode] = nev
         return list(self.events.values())

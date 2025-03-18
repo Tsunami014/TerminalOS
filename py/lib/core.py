@@ -26,12 +26,28 @@ def loadExternals():
 
 class Help(App):
     NAME = 'Help'
+    ADD_TO_LIST = True
     def __init__(self):
         super().__init__([
             wids.Text(RelativePos(0.5, 0), 'HELP'), 
             wids.Button(RelativePos(0.5, 0, force_y=1), 'Hello', lambda: Popup(wids.Text(StaticPos(0, 0), 'You pressed\nthe button!'))),
-            wids.TextInput(RelativePos(0.5, 0, force_y=3), 50)
+            wids.TextInput(RelativePos(0.5, 0, force_y=3), 50, 10)
         ])
+
+class TerminalApp(App):
+    NAME = 'Terminal App'
+    cmd = ''
+    def __init__(self):
+        super().__init__([wids.Terminal(StaticPos(0, 0), self.cmd, 0, 0)])
+    
+    def onScreenUpdate(self):
+        sze = self.Size()
+        self.widgets[0].resize(sze[0]-2, sze[1]-2)
+
+class Terminal(TerminalApp):
+    NAME = 'Terminal'
+    cmd = '/bin/sh'
+    ADD_TO_LIST = True
 
 class SoftwareManager(App):
     NAME = 'Software Manager'

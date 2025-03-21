@@ -7,6 +7,8 @@ import time
 import shutil
 
 __all__ = [
+    'Screen',
+        'TerminalScreen',
     'TerminalAPI',
 
     'Position',
@@ -19,52 +21,77 @@ __all__ = [
     'App'
 ]
 
-ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+# ansi_escape: \x1B[@-_][0-?]*[ -/]*[@-~]
 
-def strLen(s):
-    return len(ansi_escape.sub('', s))
-def ANSILen(s):
-    return len(s) - len(ansi_escape.sub('', s))
-def split(s):
-    return re.findall(r'(?:\x1B\[[0-9;]*[a-zA-Z])|[^\x1B]', s)
-
-class Row:
-    def __init__(self, data=''):
-        self.data = list(data)
-        self.fix()
+_ALL_CHR_REGEX = re.compile(r'^(\x1B[@-_][0-?]*[ -/]*[@-~])*$')
+class Chr: # You should NEVER isinstance this class. Use it as a normal string. `c[-1]` and `c[:-1]` are some functions to differentiate.
+    def __init__(self, data):
+        if _ALL_CHR_REGEX.match(data):
+            self.seqs = data
+            self.chr = ' '
+        else:
+            self.seqs = data[:-1]
+            self.chr = data[-1]
     
     def __getitem__(self, idx):
-        return self.data[idx]
-    
-    def __setitem__(self, idx, value):
-        if idx >= len(self.data):
-            self.data += ['']*(idx-len(self.data)+1)
-        self.data[idx] = value
+        if idx == -1:
+            return self.chr
+        return (self.seqs+self.chr)[idx]
     
     def __len__(self):
-        return len(self.data)
-    
-    def __eq__(self, other):
-        if isinstance(other, str):
-            return ''.join(self.data) == other
-        return self.data == other.data
-    
-    @staticmethod
-    def split(s):
-        tokens = re.findall(r'(?:(?:\x1B\[[0-9;]*[a-zA-Z])*[^\x1B]?)', s)
-        return [i for i in tokens if i]
-
-    def fix(self):
-        self.data = self.split(''.join(self.data))
-    
-    def __add__(self, other):
-        nr = Row(self.data+self.split(other))
-        nr.fix()
-        return nr
+        return 1
     
     def __str__(self):
-        return ''.join(self.data)
-    def __repr__(self): return str(self)
+        return self.seqs+self.chr
+    def __repr__(self):
+        return str(self)
+
+class Row(list):
+    def __str__(self):
+        return ''.join(str(i) for i in self)
+    
+    def __repr__(self):
+        return ''.join(i[-1] for i in self)
+    
+    def __add__(self, other):
+        return Row(super().__add__(other))
+
+    def __iadd__(self, other):
+        super().__iadd__(other)
+        return self
+    
+    def split(self, sep=None):
+        if sep is None:
+            sep = ' '
+        out = []
+        curr = Row()
+        for i in self:
+            if str(i) == sep:
+                out.append(curr)
+                curr = Row()
+            else:
+                curr.append(i)
+        out.append(curr)
+        return out
+    
+    def rfind(self, sub, start=None, end=None):
+        if start is None:
+            start = 0
+        if end is None:
+            end = len(self)
+        for i in range(min(end, len(self))-1, start-1, -1):
+            if self[i][-1] == sub:
+                return i
+        return -1
+    
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return Row(super().__getitem__(idx))
+        return super().__getitem__(idx)
+
+_SPL_REGEX = re.compile(r'\n|(?:(?:\x1B[@-_][0-?]*[ -/]*[@-~])*.?)')
+def SPL(txt):
+    return [i if len(i) == 1 else Chr(i) for i in _SPL_REGEX.findall(txt) if i]
 
 class Screen:
     def __init__(self):
@@ -76,16 +103,19 @@ class Screen:
     def Write(self, x, y, *args):
         """Writes "".join(args) at (x, y)"""
         t = "".join(args)
+        if t == '' or y < 0:
+            return
         if x < 0:
             t = t[-x:]
             x = 0
+        spl = SPL(t)
         if y in self.screen:
             if len(self.screen[y]) >= x:
-                self.screen[y] = Row(self.screen[y][:x] + Row.split(t) + self.screen[y][x+strLen(t):])
+                self.screen[y] = self.screen[y][:x] + spl + self.screen[y][x+len(spl):]
             else:
-                self.screen[y] += ' '*(x-strLen(str(self.screen[y]))) + t
+                self.screen[y] += [' ']*(x-len(self.screen[y])) + spl
         else:
-            self.screen[y] = Row(' '*x+t)
+            self.screen[y] = Row(' '*x)+spl
     
     def Get(self, x, y):
         """Gets the character at (x, y)"""
@@ -93,6 +123,129 @@ class Screen:
             if len(self.screen[y]) > x:
                 return self.screen[y][x]
         return ' '
+
+class Cursor:
+    def __init__(self, terminal, x=0, y=0):
+        self.terminal = terminal
+        self._values = [x, y]
+
+    def __getitem__(self, index):
+        return self._values[index]
+
+    def __setitem__(self, index, value):
+        if not isinstance(index, int):
+            raise TypeError(f'Cursor indices must be integers, not {type(index).__name__}')
+        if not isinstance(value, int):
+            raise TypeError(f'Cursor values must be integers, not {type(value).__name__}')
+        if index not in (0, 1):
+            raise IndexError(f'Index {index} not in range 0-1!')
+
+        max_val = [self.terminal.width, self.terminal.height][index]
+        if not (0 <= value <= max_val):
+            raise ValueError(f'Cursor item {index} must be between 0-{max_val}, found {value}!')
+
+        self._values[index] = value
+
+_TERMINAL_REGEX = re.compile(r'(?:\x1B[@-_][0-?]*[ -/]*[@-~])|\n|.')
+class TerminalScreen(Screen):
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.cursor = Cursor(self)
+        super().__init__()
+
+    def incrCursor1(self):
+        self.cursor[0] = 0
+        if self.cursor[1]+1 > self.height:
+            self.screen = {i-1: j for i, j in self.screen.items() if i > 0}
+            self.cursor[1] = self.height
+        else:
+            self.cursor[1] += 1
+    
+    @staticmethod
+    def cursorSetItem(self, curSelf, idx, it):
+        if not isinstance(idx, int):
+            raise TypeError(
+                'Cursor indices must be integers, not '+type(idx).__name__
+            )
+        if not isinstance(it, int):
+            raise TypeError(
+                'Cursor items must be integers, not '+type(it).__name__
+            )
+        if idx != 0 and idx != 1:
+            raise IndexError(
+                f'Index {idx} not in range 0-1!'
+            )
+        mx = [self.width, self.height][curSelf[idx]]
+        if it < 0 or it > mx:
+            raise ValueError(
+                f'Cursor item {idx} must be between 0-{mx}, found {it}!'
+            )
+        self._setCur(curSelf, idx, it)
+    
+    def _ProcessEscape(self, seq):
+        command = seq[-1]
+        if command == 'm': # Is colour sequence, can just write
+            self._Write_SPL(*self.cursor, [Chr(seq+str(self.Get(*self.cursor)))])
+            return
+        args = seq[2:-1]
+        arg_list = [int(arg) if arg.isdigit() else 1 for arg in args.split(';')] if args else []
+
+        if command in ('H', 'f'):
+            # Set cursor position. ANSI coordinates are 1-indexed.
+            row = (arg_list[0] - 1) if len(arg_list) >= 1 else 0
+            col = (arg_list[1] - 1) if len(arg_list) >= 2 else 0
+            self.cursor = [row, col]
+        elif command == 'A':  # Cursor up.
+            n = arg_list[0] if arg_list else 1
+            self.cursor[0] = max(0, self.cursor[0] - n)
+        elif command == 'B':  # Cursor down.
+            n = arg_list[0] if arg_list else 1
+            self.cursor[0] += n
+        elif command == 'C':  # Cursor forward (right).
+            n = arg_list[0] if arg_list else 1
+            self.cursor[1] += n
+        elif command == 'D':  # Cursor backward (left).
+            n = arg_list[0] if arg_list else 1
+            self.cursor[1] = max(0, self.cursor[1] - n)
+        elif command == 'J':
+            # Erase in display. CSI 2J typically clears the entire screen.
+            if arg_list and arg_list[0] == 2:
+                self.Clear()
+        elif command == 'K':
+            # Erase in line. Typically erases from the cursor to the end of the line.
+            self.screen[self.cursor[1]] = self.screen[self.cursor[1]][:self.cursor[0]]
+        else:
+            pass
+    
+    def _Write_SPL(self, x, y, spl):
+        if y in self.screen:
+            if len(self.screen[y]) >= x:
+                self.screen[y] = self.screen[y][:x] + spl + self.screen[y][x+len(spl):]
+            else:
+                self.screen[y] += [' ']*(x-len(self.screen[y])) + spl
+        else:
+            self.screen[y] = Row(' '*x)+spl
+    
+    def WriteAtCur(self, *args):
+        """Writes "".join(args) at self.cursor, moving self.cursor along"""
+        t = "".join(args)
+        if t == '':
+            return
+        
+        t = self.Get(*self.cursor)[:-1]+t
+        
+        for match in _TERMINAL_REGEX.findall(t):
+            if match[0] == '\033':
+                self._ProcessEscape(match)
+            elif match == '\n':
+                self.incrCursor1()
+            else:
+                self._Write_SPL(*self.cursor, [match])
+                if self.cursor[0]+1 > self.width:
+                    self.incrCursor1()
+                else:
+                    self.cursor[0] += 1
 
 class Clipboard:
     CLIP = []
@@ -593,16 +746,14 @@ class TerminalAPI:
             if y in self.Screen.screen:
                 newrow = self.Screen.screen[y]
                 if oldrow != newrow:
-                    new = str(newrow)+' '*max(len(oldrow)-len(newrow), 0)
-                    sys.stdout.write(f'\033[{y+1};1H'+new[:winSize[0]+ANSILen(new)])
+                    sys.stdout.write(f'\033[{y+1};1H'+str(newrow[:winSize[0]+1])[:-1]+'\033[K')
             else:
-                sys.stdout.write(f'\033[{y+1};1H'+' '*min(strLen(str(oldrow)), winSize[0]))
+                sys.stdout.write(f'\033[{y+1};1H\033[K')
         for y, newrow in self.Screen.screen.items():
             if y < 0 or y > winSize[1]-1:
                 continue
-            if y not in self._oldScreen.screen or self._oldScreen.screen[y] != newrow:
-                new = str(newrow)
-                sys.stdout.write(f'\033[{y+1};1H'+new[:winSize[0]+ANSILen(new)])
+            if y not in self._oldScreen.screen:
+                sys.stdout.write(f'\033[{y+1};1H'+str(newrow[:winSize[0]+1])[:-1])
     
     def printAll(self):
         self._print_borders()
@@ -616,7 +767,7 @@ class TerminalAPI:
             else:
                 new = ''
             
-            sys.stdout.write(f'\033[{y+1};1H\033[K'+new[:winSize[0]+ANSILen(new)])
+            sys.stdout.write(f'\033[{y+1};1H\033[K'+str(new[:winSize[0]+1])[:-1])
     
     @staticmethod
     def get_terminal_size():
@@ -749,18 +900,15 @@ class Popup(Container):
         self.Screen.Clear()
         for widget in self.widgets:
             widget.draw(False)
-        
-        lines = ["" for _ in range(max(self.Screen.screen.keys())+1)]
-        for idx, line in self.Screen.screen.items():
-            lines[idx] = str(line)
 
         cols, rows = self.API.get_terminal_size()
-        x, y = cols - max(strLen(i) for i in lines) - 2, rows - len(lines) - 2
-        self.width, self.height = max(strLen(i) for i in (lines or [''])), len(lines)
+        self.width = max(len(i) for i in self.Screen.screen.values()) + 2
+        self.height = max(self.Screen.screen.keys()) + 3
+        x, y = cols - self.width, rows - self.height
         self.API.Screen.Write(x, y, '\033[100;34;1m│\033[39m', ' '*self.width, ' \033[0m')
-        for idx, ln in enumerate(lines):
-            self.API.Screen.Write(x, y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{ln} {" "*(self.width-len(ln))}\033[0m')
-        self.API.Screen.Write(x, y+self.height+1, '\033[100;34;1m│\033[39m', ' '*self.width, ' \033[0m')
+        for idx, ln in self.Screen.screen.items():
+            self.API.Screen.Write(x, y+idx+1, f'\033[100;34;1m│\033[39{";22" if idx > 0 else ""}m{str(ln)} {" "*(self.width-len(ln))}\033[0m')
+        self.API.Screen.Write(x, y+self.height-1, '\033[100;34;1m│\033[39m', ' '*self.width, ' \033[0m')
     
     def update(self):
         if time.time() - self.start_time > self.duration:
@@ -848,7 +996,7 @@ class App(Container, metaclass=AppMeta):
         wid, hei = self.Size(gridP)
         for idx, ln in self.Screen.screen.items():
             if idx <= hei-2:
-                self.API.Screen.Write(x+1, y+idx+1, *ln[:wid-2])
+                self.API.Screen.Write(x+1, y+idx+1, str(ln[:wid-2]))
 
     def update(self, focus):
         self.focus = focus

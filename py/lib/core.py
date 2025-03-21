@@ -43,6 +43,9 @@ class TerminalApp(App):
     def onScreenUpdate(self):
         sze = self.Size()
         self.widgets[0].resize(sze[0]-2, sze[1]-2)
+    
+    def update(self, focus):
+        return super().update(focus)
 
 class Terminal(TerminalApp):
     NAME = 'Terminal'
